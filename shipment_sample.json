@@ -1,0 +1,81 @@
+{
+  "shipmentId": "SHIP-2026-111123",
+  "status": "BOOKED",
+
+  "customer": {
+    "customerId": "CUST-4567",
+    "name": "Customer ABC  A/S"
+  },
+
+  "parties": {
+    "shipper": {
+      "name": "Customer ABC  A/S",
+      "address": {
+        "street": "Logisticsvej 500",
+        "city": "København",
+        "postalCode": "1600",
+        "country": "DK"
+      }
+    },
+    "consignee": {
+      "name": "XYZ Retail A/S",
+      "address": {
+        "street": "Paradisæblevej 8",
+        "city": "Kolding",
+        "postalCode": "2045",
+        "country": "DK"
+      }
+    }
+  },
+
+  "route": {
+    "pickup": {
+      "date": "2026-04-20",
+      "timeWindow": {
+        "from": "08:00",
+        "to": "14:00"
+      }
+    },
+    "delivery": {
+      "date": "2026-04-21"
+    }
+  },
+
+  "goods": {
+    "items": [
+      {
+        "description": "Palletised goods",
+        "packageType": "PALLET",
+        "quantity": 10,
+        "weightKg": 750,
+        "volumeM3": 4.2
+      }
+    ],
+    "totalWeightKg": 750,
+    "totalVolumeM3": 4.2
+  },
+
+  "transport": {
+    "mode": "ROAD",
+    "serviceLevel": "STANDARD",
+    "incoterms": "DAP"
+  },
+
+  "references": {
+    "customerReference": "PO-889923",
+    "carrierReference": null
+  },
+
+  "documents": [
+    {
+      "type": "CMR",
+      "status": "PENDING"
+    }
+  ],
+
+  "system": {
+    "source": "MAIL_TO_SHIPMENT",
+    "createdAt": "2026-04-17T09:12:00Z",
+    "lastUpdatedAt": "2026-04-17T09:18:00Z"
+  }
+}

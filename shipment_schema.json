@@ -1,0 +1,81 @@
+{
+  "shipmentId": "String",
+  "status": "String",
+
+  "customer": {
+    "customerId": "String",
+    "name": "String"
+  },
+
+  "parties": {
+    "shipper": {
+      "name": "String",
+      "address": {
+        "street": "String",
+        "city": "String",
+        "postalCode": "String",
+        "country": "String"
+      }
+    },
+    "consignee": {
+      "name": "String",
+      "address": {
+        "street": "String",
+        "city": "String",
+        "postalCode": "String",
+        "country": "String"
+      }
+    }
+  },
+
+  "route": {
+    "pickup": {
+      "date": "String (ISO‑8601: YYYY‑MM‑DD)",
+      "timeWindow": {
+        "from": "String (HH:mm)",
+        "to": "String (HH:mm)"
+      }
+    },
+    "delivery": {
+      "date": "String (ISO‑8601: YYYY‑MM‑DD)"
+    }
+  },
+
+  "goods": {
+    "items": [
+      {
+        "description": "String",
+        "packageType": "String",
+        "quantity": "Integer",
+        "weightKg": "Number",
+        "volumeM3": "Number"
+      }
+    ],
+    "totalWeightKg": "Number",
+    "totalVolumeM3": "Number"
+  },
+
+  "transport": {
+    "mode": "String",
+    "serviceLevel": "String",
+    "incoterms": "String"
+  },
+
+  "references": {
+    "customerReference": "String",
+    "carrierReference": "String"
+  },
+
+  "documents": [
+    {
+      "type": "String",
+      "status": "String"
+    }
+  ],
+
+  "system": {
+    "source": "String",
+    "createdAt": "String (ISO‑8601 datetime)",
+    "lastUpdatedAt": "String (ISO‑8601 datetime)"
+  }
+}

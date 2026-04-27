@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NTG Smart Checkpoints — POC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body, #root { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: 'Geist', ui-sans-serif, -apple-system, system-ui, sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      letter-spacing: -0.005em;
+    }
+    button { font-family: inherit; }
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes slideIn { from { transform: translateX(40px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+    @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } }
+    .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+    ::selection { background: #c2410c; color: #fff; }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="denmark-map.jsx"></script>
+  <script type="text/babel" src="leaflet-map.jsx"></script>
+  <script type="text/babel" src="views.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "dark": true,
+      "mapVariant": "geographic",
+      "audienceMode": "internal",
+      "density": "regular",
+      "showTier1": true,
+      "showTier2": true,
+      "showTier3": true,
+      "showTier4": false
+    }/*EDITMODE-END*/;
+
+    function useTheme(dark) {
+      return useMemo(() => dark ? {
+        ink:    "#f3efe6",
+        paper:  "#15161a",
+        panel:  "#1c1d22",
+        muted:  "#2a2c33",
+        accent: "#f0a05a",
+        line:   "#2a2c33",
+      } : {
+        ink:    "#1a1814",
+        paper:  "#f6f3ec",
+        panel:  "#fbf8f2",
+        muted:  "#e6e1d3",
+        accent: "#c2410c",
+        line:   "#e2ddce",
+      }, [dark]);
+    }
+
+    function App() {
+      const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const theme = useTheme(tweaks.dark);
+      const [view, setView] = useState("overview"); // overview | shipments | exceptions | analytics
+      const [shipments, setShipments] = useState(window.SHIPMENTS);
+      const [selected, setSelected] = useState(null);
+      const [now, setNow] = useState(window.NOW_REF);
+      const [recentEvent, setRecentEvent] = useState(null);
+      const customerPortalName = "Køge Retail Distribution";
+      const isCustomerView = tweaks.audienceMode === "customer";
+
+      const visibleTiers = {
+        1: tweaks.showTier1, 2: tweaks.showTier2, 3: tweaks.showTier3, 4: tweaks.showTier4,
+      };
+      const displayedShipments = useMemo(() => (
+        isCustomerView ? shipments.filter(s => s.customer === customerPortalName) : shipments
+      ), [shipments, isCustomerView]);
+
+      useEffect(() => {
+        if (isCustomerView && (view === "exceptions" || view === "analytics")) setView("overview");
+      }, [isCustomerView, view]);
+
+      useEffect(() => {
+        if (selected && !displayedShipments.some(s => s.id === selected.id)) setSelected(null);
+      }, [displayedShipments, selected]);
+
+      // Live ticking clock
+      useEffect(() => {
+        const id = setInterval(() => setNow(n => n + 60_000), 4000);
+        return () => clearInterval(id);
+      }, []);
+
+      // Simulate live event
+      const simulateEvent = () => {
+        const candidates = displayedShipments.filter(s => s.status === "in-transit" && s.events.length < s.route.length);
+        if (candidates.length === 0) return;
+        const s = candidates[Math.floor(Math.random() * candidates.length)];
+        const nextGate = s.route[s.events.length];
+        const newEvt = { gate: nextGate, timestamp: new Date(now).toISOString(), confidence: 0.95 + Math.random() * 0.04 };
+        const updated = { ...s, events: [...s.events, newEvt], progress: Math.min(0.99, (s.events.length + 1) / s.route.length) };
+        setShipments(prev => prev.map(x => x.id === s.id ? updated : x));
+        setRecentEvent({ shipment: s.id, gate: window.GATE_BY_ID[nextGate].name, t: Date.now() });
+      };
+      useEffect(() => {
+        if (!recentEvent) return;
+        const id = setTimeout(() => setRecentEvent(null), 4500);
+        return () => clearTimeout(id);
+      }, [recentEvent]);
+
+      const stats = useMemo(() => ({
+        inTransit: displayedShipments.filter(s => s.status === "in-transit").length,
+        atRisk: displayedShipments.filter(s => s.status === "at-risk").length,
+        exception: displayedShipments.filter(s => s.status === "exception").length,
+        delivered: displayedShipments.filter(s => s.status === "delivered").length,
+      }), [displayedShipments]);
+      const navItems = [
+        { id: "overview", label: "Overview", icon: "◐" },
+        { id: "shipments", label: "Shipments", icon: "≡", badge: displayedShipments.length },
+        ...(!isCustomerView ? [
+          { id: "exceptions", label: "Exceptions", icon: "△", badge: stats.atRisk + stats.exception, badgeColor: theme.accent },
+          { id: "analytics", label: "Analytics", icon: "▤" },
+        ] : []),
+      ];
+
+      return (
+        <div style={{
+          height: "100%", display: "grid", gridTemplateColumns: "240px 1fr",
+          background: theme.paper, color: theme.ink,
+          fontFamily: "'Geist', sans-serif",
+        }}>
+          {/* Sidebar */}
+          <aside style={{
+            borderRight: `1px solid ${theme.line}`, padding: "22px 20px",
+            display: "flex", flexDirection: "column", background: theme.panel,
+          }}>
+            <Brand ink={theme.ink} accent={theme.accent} />
+            <div style={{ marginTop: 24 }}>
+              <AudienceSwitch
+                value={tweaks.audienceMode}
+                onChange={(v) => setTweak("audienceMode", v)}
+                ink={theme.ink}
+                paper={theme.paper}
+                accent={theme.accent}
+              />
+              {isCustomerView && (
+                <div style={{ marginTop: 10, fontSize: 10, lineHeight: 1.5, opacity: 0.55, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.04em" }}>
+                  B2B portal · {customerPortalName}
+                </div>
+              )}
+            </div>
+            <nav style={{ marginTop: 36, display: "flex", flexDirection: "column", gap: 2 }}>
+              {navItems.map(item => (
+                <button key={item.id} onClick={() => setView(item.id)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "9px 12px",
+                    border: 0, background: view === item.id ? `${theme.ink}0c` : "transparent",
+                    color: theme.ink, cursor: "pointer", fontSize: 13, textAlign: "left", fontWeight: 500,
+                    fontFamily: "inherit",
+                  }}>
+                  <span style={{ width: 16, opacity: 0.6, fontSize: 14 }}>{item.icon}</span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.badge != null && (
+                    <span style={{
+                      fontSize: 10, fontFamily: "'JetBrains Mono', monospace",
+                      padding: "1px 6px", background: item.badgeColor || `${theme.ink}12`,
+                      color: item.badgeColor ? theme.paper : theme.ink, opacity: item.badgeColor ? 1 : 0.7,
+                    }}>{item.badge}</span>
+                  )}
+                </button>
+              ))}
+            </nav>
+
+            <div style={{ marginTop: "auto", paddingTop: 20, borderTop: `1px solid ${theme.line}` }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.55, marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>
+                {isCustomerView ? "Your shipments" : "Network"}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
+                <MiniStat label={isCustomerView ? "Shipments" : "Gates"} value={isCustomerView ? displayedShipments.length : window.GATES.length} ink={theme.ink} />
+                <MiniStat label={isCustomerView ? "Delivered" : "Corridors"} value={isCustomerView ? stats.delivered : window.CORRIDORS.length} ink={theme.ink} />
+                <MiniStat label="Active" value={stats.inTransit} ink={theme.ink} />
+                <MiniStat label={isCustomerView ? "Attention" : "Issues"} value={stats.atRisk + stats.exception} ink={theme.ink} accent={theme.accent} />
+              </div>
+              <div style={{ marginTop: 18, fontSize: 10, opacity: 0.45, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.04em" }}>
+                {window.fmtDate(now)} · {window.fmtTime(now)}
+                <span className="pulse-dot" style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#0a8a4f", marginLeft: 8, verticalAlign: "middle" }} />
+                <span style={{ marginLeft: 6, color: "#0a8a4f" }}>LIVE</span>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main */}
+          <main style={{ height: "100vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            {view === "overview" && (
+              <Overview
+                shipments={displayedShipments} setSelected={setSelected} stats={stats}
+                theme={theme} now={now} tweaks={tweaks} visibleTiers={visibleTiers}
+                selectedShipmentId={selected?.id}
+                audienceMode={tweaks.audienceMode}
+                customerName={customerPortalName}
+                onSimulate={simulateEvent}
+              />
+            )}
+            {view === "shipments" && (
+              <ShipmentList
+                shipments={displayedShipments} onSelect={setSelected} selectedId={selected?.id}
+                density={tweaks.density} accent={theme.accent} ink={theme.ink} paper={theme.paper}
+                now={now}
+              />
+            )}
+            {view === "exceptions" && (
+              <ExceptionQueue
+                shipments={displayedShipments} onSelect={setSelected}
+                ink={theme.ink} paper={theme.paper} accent={theme.accent}
+                density={tweaks.density} now={now}
+              />
+            )}
+            {view === "analytics" && (
+              <Analytics
+                shipments={displayedShipments}
+                ink={theme.ink} paper={theme.paper} accent={theme.accent}
+                density={tweaks.density}
+              />
+            )}
+          </main>
+
+          {/* Detail drawer */}
+          {selected && (
+            <ShipmentDetail
+              shipment={shipments.find(s => s.id === selected.id) || selected}
+              onClose={() => setSelected(null)}
+              accent={theme.accent} ink={theme.ink} paper={theme.paper}
+              now={now} density={tweaks.density} mapVariant={tweaks.mapVariant}
+              audienceMode={tweaks.audienceMode}
+              visibleTiers={visibleTiers}
+            />
+          )}
+
+          {/* Live event toast */}
+          {recentEvent && (
+            <div style={{
+              position: "fixed", bottom: 24, left: 260, zIndex: 200,
+              background: theme.ink, color: theme.paper, padding: "12px 16px",
+              display: "flex", alignItems: "center", gap: 12, fontSize: 12,
+              boxShadow: `0 8px 32px ${theme.ink}40`, animation: "slideIn 0.3s",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: theme.accent }} className="pulse-dot" />
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, opacity: 0.7 }}>GATE EVENT</span>
+              <span style={{ fontWeight: 500 }}>{recentEvent.shipment}</span>
+              <span style={{ opacity: 0.6 }}>passed</span>
+              <span style={{ fontWeight: 500 }}>{recentEvent.gate}</span>
+            </div>
+          )}
+
+          {/* Tweaks */}
+          <TweaksPanel title="Tweaks">
+            <TweakSection label="Theme">
+              <TweakToggle label="Dark mode" value={tweaks.dark} onChange={v => setTweak("dark", v)} />
+            </TweakSection>
+            <TweakSection label="Density">
+              <TweakRadio label="" value={tweaks.density} options={["compact", "regular", "comfy"]} onChange={v => setTweak("density", v)} />
+            </TweakSection>
+            <TweakSection label="Map">
+              <TweakRadio label="Style" value={tweaks.mapVariant} options={[
+                { value: "schematic", label: "Schematic" },
+                { value: "geographic", label: "Real map" },
+              ]} onChange={v => setTweak("mapVariant", v)} />
+              <TweakToggle label="Tier 1 — Chokepoints" value={tweaks.showTier1} onChange={v => setTweak("showTier1", v)} />
+              <TweakToggle label="Tier 2 — Ports & ferries" value={tweaks.showTier2} onChange={v => setTweak("showTier2", v)} />
+              <TweakToggle label="Tier 3 — Logistics hubs" value={tweaks.showTier3} onChange={v => setTweak("showTier3", v)} />
+              <TweakToggle label="Tier 4 — Customer sites" value={tweaks.showTier4} onChange={v => setTweak("showTier4", v)} />
+            </TweakSection>
+            <TweakSection label="Live data">
+              <TweakButton label="Simulate gate event" onClick={simulateEvent} />
+              <TweakButton label="Reset to initial state" onClick={() => setShipments(window.SHIPMENTS)} secondary />
+            </TweakSection>
+          </TweaksPanel>
+        </div>
+      );
+    }
+
+    // ── Brand mark ────────────────────────────────────────────────────────
+    function Brand({ ink, accent }) {
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <svg width="28" height="28" viewBox="0 0 28 28">
+            <rect x="2" y="2" width="24" height="24" fill="none" stroke={ink} strokeWidth="1.4" />
+            <line x1="2" y1="14" x2="10" y2="14" stroke={ink} strokeWidth="1.4" />
+            <line x1="18" y1="14" x2="26" y2="14" stroke={ink} strokeWidth="1.4" />
+            <circle cx="14" cy="14" r="3" fill={accent} />
+          </svg>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.005em", lineHeight: 1.1 }}>NTG</div>
+            <div style={{ fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6, fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
+              Smart Checkpoints
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function MiniStat({ label, value, ink, accent }) {
+      return (
+        <div>
+          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.55, fontFamily: "'JetBrains Mono', monospace" }}>{label}</div>
+          <div style={{ fontSize: 18, fontFamily: "'Instrument Serif', Georgia, serif", marginTop: 2, color: accent || ink }}>{value}</div>
+        </div>
+      );
+    }
+
+    function AudienceSwitch({ value, onChange, ink, paper, accent }) {
+      const options = [
+        { id: "internal", label: "Internal" },
+        { id: "customer", label: "Customer" },
+      ];
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, padding: 2, background: `${ink}10`, border: `1px solid ${ink}14` }}>
+          {options.map(o => {
+            const active = value === o.id;
+            return (
+              <button
+                key={o.id}
+                onClick={() => onChange(o.id)}
+                style={{
+                  border: 0, padding: "7px 8px", cursor: "pointer",
+                  background: active ? ink : "transparent",
+                  color: active ? paper : ink,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase",
+                  boxShadow: active && o.id === "customer" ? `inset 0 -2px 0 ${accent}` : "none",
+                }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ── Overview ──────────────────────────────────────────────────────────
+    function Overview({ shipments, setSelected, stats, theme, now, tweaks, visibleTiers, selectedShipmentId, audienceMode, customerName, onSimulate }) {
+      const padX = tweaks.density === "compact" ? 24 : tweaks.density === "comfy" ? 40 : 32;
+      const isCustomerView = audienceMode === "customer";
+      const customerGateIds = useMemo(() => new Set(shipments.flatMap(s => s.route)), [shipments]);
+      const mapGates = isCustomerView
+        ? window.GATES.filter(g => customerGateIds.has(g.id))
+        : window.GATES;
+      const mapCorridors = isCustomerView
+        ? shipments.map(s => ({ id: s.id, name: s.id, color: "ember", gates: s.route }))
+        : window.CORRIDORS;
+      const recent = [...shipments]
+        .filter(s => s.events.length > 0)
+        .map(s => ({ s, e: s.events[s.events.length - 1] }))
+        .sort((a, b) => new Date(b.e.timestamp) - new Date(a.e.timestamp))
+        .slice(0, 8);
+
+      return (
+        <div style={{ height: "100%", overflow: "auto" }}>
+          {/* Editorial header */}
+          <header style={{ padding: `38px ${padX}px 22px`, borderBottom: `1px solid ${theme.line}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 32 }}>
+              <div style={{ flex: 1, maxWidth: 720 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", opacity: 0.55, fontFamily: "'JetBrains Mono', monospace", marginBottom: 14 }}>
+                  {isCustomerView ? `Customer portal · ${customerName}` : "Proof of concept · Denmark Pilot · v1.0"}
+                </div>
+                <h1 style={{
+                  margin: 0, fontFamily: "'Instrument Serif', Georgia, serif",
+                  fontWeight: 400, fontSize: 64, letterSpacing: "-0.02em", lineHeight: 1.08,
+                }}>
+                  {isCustomerView ? "Your shipments" : "Progress confirmed"}<br />
+                  <span style={{ fontStyle: "italic", color: theme.accent }}>
+                    {isCustomerView ? "without chasing updates." : "by the network itself."}
+                  </span>
+                </h1>
+                <p style={{ marginTop: 32, fontSize: 15, lineHeight: 1.55, opacity: 0.78, maxWidth: 580 }}>
+                  {isCustomerView
+                    ? "Follow confirmed milestone events for your own shipments only. Sensitive network data, other customers, internal confidence scoring, and operational analytics stay private."
+                    : "Instead of asking vehicles to report their position, smart checkpoints confirm shipment progress passively — at bridges, ports, terminals, and customer gates — generating timestamped events without surveillance, drivers, or manual scans."}
+                </p>
+              </div>
+              <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, opacity: 0.55, letterSpacing: "0.04em" }}>
+                <div>{window.fmtDate(now).toUpperCase()}</div>
+                <div style={{ marginTop: 4 }}>{window.fmtTime(now)} CET</div>
+              </div>
+            </div>
+          </header>
+
+          {/* KPI strip */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: `1px solid ${theme.line}` }}>
+            <BigKPI label="In transit"   value={stats.inTransit}                           ink={theme.ink} />
+            <BigKPI label="At risk"      value={stats.atRisk}      accent={"#d97706"}      ink={theme.ink} divider lineColor={theme.line} />
+            <BigKPI label="Exceptions"   value={stats.exception}   accent={"#b91c1c"}      ink={theme.ink} divider lineColor={theme.line} />
+            <BigKPI label="Delivered 24h"value={stats.delivered}   accent={"#0a8a4f"}      ink={theme.ink} divider lineColor={theme.line} />
+          </div>
+
+          {/* Map + recent events */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", borderBottom: `1px solid ${theme.line}` }}>
+            <div style={{ borderRight: `1px solid ${theme.line}`, padding: `0 0 0 0`, position: "relative" }}>
+              <div style={{ position: "absolute", top: 18, left: padX, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.55, fontFamily: "'JetBrains Mono', monospace", zIndex: 2 }}>
+                {isCustomerView ? "Your confirmed route events" : "Live network · Denmark"}
+              </div>
+              {tweaks.mapVariant === "geographic" ? (
+                <window.LeafletDenmark
+                  gates={mapGates}
+                  corridors={mapCorridors}
+                  shipments={shipments}
+                  selectedShipmentId={selectedShipmentId}
+                  visibleTiers={visibleTiers}
+                  inkColor={theme.ink} paperColor={theme.paper} accentColor={theme.accent}
+                  height={560}
+                  dark={tweaks.dark}
+                  onShipmentClick={(s) => setSelected(s)}
+                />
+              ) : (
+                <window.DenmarkMap
+                  gates={mapGates}
+                  corridors={mapCorridors}
+                  shipments={shipments}
+                  visibleTiers={visibleTiers}
+                  showLabels={true}
+                  inkColor={theme.ink} paperColor={theme.paper} accentColor={theme.accent} mutedColor={theme.muted}
+                  height={560}
+                  variant={tweaks.mapVariant}
+                  onShipmentClick={(s) => setSelected(s)}
+                />
+              )}
+            </div>
+            <aside style={{ padding: `22px ${padX}px`, display: "flex", flexDirection: "column", gap: 14, overflow: "auto", maxHeight: 560 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.55, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {isCustomerView ? "Your recent events" : "Recent gate events"}
+                </div>
+                {!isCustomerView && <button onClick={onSimulate} style={{
+                  border: `1px solid ${theme.ink}24`, background: "transparent", color: theme.ink,
+                  padding: "4px 8px", fontSize: 10, fontFamily: "'JetBrains Mono', monospace",
+                  letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer",
+                }}>+ Simulate</button>}
+              </div>
+              {recent.map(({ s, e }, i) => {
+                const g = window.GATE_BY_ID[e.gate];
+                return (
+                  <div key={s.id + i} onClick={() => setSelected(s)}
+                    style={{ cursor: "pointer", paddingBottom: 12, borderBottom: i < recent.length - 1 ? `1px solid ${theme.line}` : 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 500 }}>{g?.name}</span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, opacity: 0.55 }}>{window.fmtTime(e.timestamp)}</span>
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.65, marginTop: 3 }}>
+                      {s.id} <span style={{ opacity: 0.6 }}>·</span> {s.customer}
+                    </div>
+                    <div style={{ fontSize: 10, opacity: 0.4, marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
+                      conf {e.confidence.toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })}
+            </aside>
+          </div>
+
+          {/* Thesis strip */}
+          <div style={{ padding: `40px ${padX}px`, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, borderBottom: `1px solid ${theme.line}` }}>
+            <Thesis n="01" title="Passive, not voluntary" body="Visibility no longer depends on driver compliance, telematics quality, or manual milestone scans. The infrastructure does the reporting." ink={theme.ink} accent={theme.accent} />
+            <Thesis n="02" title="Few gates, large coverage" body="Denmark's freight is funneled through limited corridors. A small number of well-chosen checkpoints capture a disproportionate share of the network." ink={theme.ink} accent={theme.accent} />
+            <Thesis n="03" title="Events, not surveillance" body="No live feeds, no continuous monitoring. Just timestamped confirmations of registered vehicles passing approved gates." ink={theme.ink} accent={theme.accent} />
+          </div>
+        </div>
+      );
+    }
+
+    function BigKPI({ label, value, ink, accent, divider, lineColor }) {
+      return (
+        <div style={{ padding: "26px 32px", borderLeft: divider ? `1px solid ${lineColor}` : 0 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.55, fontFamily: "'JetBrains Mono', monospace", marginBottom: 10 }}>{label}</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            {accent && <span style={{ width: 8, height: 8, borderRadius: "50%", background: accent }} />}
+            <div style={{ fontSize: 56, fontFamily: "'Instrument Serif', Georgia, serif", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 0.95 }}>
+              {value}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function Thesis({ n, title, body, ink, accent }) {
+      return (
+        <div>
+          <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: accent, letterSpacing: "0.08em", marginBottom: 12 }}>{n}</div>
+          <h3 style={{ margin: 0, fontFamily: "'Instrument Serif', Georgia, serif", fontWeight: 400, fontSize: 26, letterSpacing: "-0.01em", lineHeight: 1.1 }}>{title}</h3>
+          <p style={{ marginTop: 12, fontSize: 13, lineHeight: 1.6, opacity: 0.72 }}>{body}</p>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
