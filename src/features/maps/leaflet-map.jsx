@@ -1,4 +1,4 @@
-// leaflet-map.jsx — real OSM-tiled map of Denmark for the geographic variant.
+// leaflet-map.jsx - real OSM-tiled map of Denmark for the geographic variant.
 // Loaded dynamically via CDN to avoid bundling.
 
 const NTG = window.NTG = window.NTG || {};
@@ -8,22 +8,24 @@ NTG.features.maps = NTG.features.maps || {};
 const shipmentData = NTG.domain.shipments.data;
 
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-const LEAFLET_JS  = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
 let leafletPromise = null;
 function loadLeaflet() {
   if (leafletPromise) return leafletPromise;
   leafletPromise = new Promise((resolve, reject) => {
     if (window.L) return resolve(window.L);
+
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = LEAFLET_CSS;
     document.head.appendChild(link);
-    const s = document.createElement("script");
-    s.src = LEAFLET_JS;
-    s.onload = () => resolve(window.L);
-    s.onerror = reject;
-    document.head.appendChild(s);
+
+    const script = document.createElement("script");
+    script.src = LEAFLET_JS;
+    script.onload = () => resolve(window.L);
+    script.onerror = reject;
+    document.head.appendChild(script);
   });
   return leafletPromise;
 }
@@ -61,31 +63,53 @@ const ROAD_SEGMENTS = {
   "HIR>AAL": [[57.59, 9.96], [57.41, 9.90], [57.24, 9.88], [57.05, 9.92]],
 };
 
+function mapHeightClass(height) {
+  return `ntg-map-height-${Math.round(height)}`;
+}
+
 function segmentLatLngs(fromId, toId) {
   const direct = ROAD_SEGMENTS[`${fromId}>${toId}`];
   if (direct) return direct;
+
   const reverse = ROAD_SEGMENTS[`${toId}>${fromId}`];
   if (reverse) return [...reverse].reverse();
-  const a = shipmentData.GATE_BY_ID[fromId];
-  const b = shipmentData.GATE_BY_ID[toId];
-  return a && b ? [[a.lat, a.lon], [b.lat, b.lon]] : [];
+
+  const fromGate = shipmentData.GATE_BY_ID[fromId];
+  const toGate = shipmentData.GATE_BY_ID[toId];
+  return fromGate && toGate ? [[fromGate.lat, fromGate.lon], [toGate.lat, toGate.lon]] : [];
 }
 
 function routeLatLngs(gateIds) {
   const points = [];
-  gateIds.forEach((id, i) => {
-    if (i === 0) {
-      const g = shipmentData.GATE_BY_ID[id];
-      if (g) points.push([g.lat, g.lon]);
+  gateIds.forEach((id, index) => {
+    if (index === 0) {
+      const gate = shipmentData.GATE_BY_ID[id];
+      if (gate) points.push([gate.lat, gate.lon]);
       return;
     }
-    const segment = segmentLatLngs(gateIds[i - 1], id);
-    segment.forEach((p, j) => {
-      if (j === 0 && points.length) return;
-      points.push(p);
+
+    const segment = segmentLatLngs(gateIds[index - 1], id);
+    segment.forEach((point, segmentIndex) => {
+      if (segmentIndex === 0 && points.length) return;
+      points.push(point);
     });
   });
   return points;
+}
+
+function gateTooltip(gate) {
+  return `<div class="ntg-tip-card">
+    <div class="ntg-tip-title">${gate.name}</div>
+    <div class="ntg-tip-subtitle">Tier ${gate.tier} / ${gate.type}</div>
+  </div>`;
+}
+
+function shipmentTooltip(shipment) {
+  return `<div class="ntg-tip-card">
+    <div class="ntg-tip-title">${shipment.id}</div>
+    <div class="ntg-tip-copy">${shipment.customer}</div>
+    <div class="ntg-tip-subtitle">${shipment.origin} -> ${shipment.destination}</div>
+  </div>`;
 }
 
 function LeafletDenmark({
@@ -108,12 +132,13 @@ function LeafletDenmark({
   const [ready, setReady] = React.useState(false);
   const [loadError, setLoadError] = React.useState(null);
 
-  // Init once
   React.useEffect(() => {
     let cancelled = false;
     setLoadError(null);
+
     loadLeaflet().then((L) => {
       if (cancelled || !ref.current || mapRef.current) return;
+
       const map = L.map(ref.current, {
         center: [56.1, 11.0],
         zoom: 7,
@@ -123,7 +148,6 @@ function LeafletDenmark({
       });
       mapRef.current = map;
 
-      // Tiles — Carto positron / dark-matter (free, no key)
       const tileUrl = dark
         ? "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
         : "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png";
@@ -133,7 +157,6 @@ function LeafletDenmark({
 
       L.tileLayer(tileUrl, { maxZoom: 18, subdomains: "abcd" }).addTo(map);
       L.tileLayer(labelsUrl, { maxZoom: 18, subdomains: "abcd", opacity: 0.85, pane: "shadowPane" }).addTo(map);
-
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
       layersRef.current.corridors = L.layerGroup().addTo(map);
@@ -141,10 +164,11 @@ function LeafletDenmark({
       layersRef.current.gates = L.layerGroup().addTo(map);
       layersRef.current.dots = L.layerGroup().addTo(map);
       setReady(true);
-    }).catch((err) => {
-      console.error("Leaflet failed to load", err);
+    }).catch((error) => {
+      console.error("Leaflet failed to load", error);
       if (!cancelled) setLoadError("Leaflet could not load. Switch to Schematic map or check CDN access.");
     });
+
     return () => {
       cancelled = true;
       if (mapRef.current) {
@@ -154,17 +178,12 @@ function LeafletDenmark({
     };
   }, [dark]);
 
-  // Re-render overlays whenever data changes
   React.useEffect(() => {
     const L = window.L;
     const map = mapRef.current;
     if (!L || !map) return;
-    const {
-      gates: gateLayer,
-      corridors: corridorLayer,
-      trails: trailLayer,
-      dots: dotLayer,
-    } = layersRef.current;
+
+    const { gates: gateLayer, corridors: corridorLayer, trails: trailLayer, dots: dotLayer } = layersRef.current;
     if (!gateLayer) return;
 
     gateLayer.clearLayers();
@@ -172,25 +191,25 @@ function LeafletDenmark({
     trailLayer.clearLayers();
     dotLayer.clearLayers();
 
-    // Corridors
-    corridors.forEach(c => {
-      const latlngs = routeLatLngs(c.gates);
+    corridors.forEach((corridor) => {
+      const latlngs = routeLatLngs(corridor.gates);
       L.polyline(latlngs, {
-        color: c.color === "ember" ? accentColor : inkColor,
-        weight: c.color === "ember" ? 3 : 2,
-        opacity: c.color === "ember" ? 0.85 : 0.55,
-        dashArray: c.color === "ember" ? null : "4 6",
+        color: corridor.color === "ember" ? accentColor : inkColor,
+        weight: corridor.color === "ember" ? 3 : 2,
+        opacity: corridor.color === "ember" ? 0.85 : 0.55,
+        dashArray: corridor.color === "ember" ? null : "4 6",
         lineCap: "round",
         lineJoin: "round",
       }).addTo(corridorLayer);
     });
 
-    // Active shipment trails
-    shipments.forEach(s => {
-      if (s.status === "scheduled" || s.events.length < 1) return;
-      const isSelected = s.id === selectedShipmentId;
-      const latlngs = routeLatLngs(s.events.map(e => e.gate));
+    shipments.forEach((shipment) => {
+      if (shipment.status === "scheduled" || shipment.events.length < 1) return;
+
+      const isSelected = shipment.id === selectedShipmentId;
+      const latlngs = routeLatLngs(shipment.events.map((event) => event.gate));
       if (latlngs.length < 2) return;
+
       L.polyline(latlngs, {
         color: isSelected ? accentColor : inkColor,
         weight: isSelected ? 4 : 2.4,
@@ -199,51 +218,55 @@ function LeafletDenmark({
       }).addTo(trailLayer);
     });
 
-    // Gates
-    gates.forEach(g => {
-      if (!visibleTiers[g.tier]) return;
-      const r = g.tier === 1 ? 9 : g.tier === 2 ? 7 : g.tier === 3 ? 6 : 5;
-      const marker = L.circleMarker([g.lat, g.lon], {
-        radius: r,
+    gates.forEach((gate) => {
+      if (!visibleTiers[gate.tier]) return;
+
+      const radius = gate.tier === 1 ? 9 : gate.tier === 2 ? 7 : gate.tier === 3 ? 6 : 5;
+      const marker = L.circleMarker([gate.lat, gate.lon], {
+        radius,
         fillColor: paperColor,
         color: inkColor,
         weight: 1.8,
         fillOpacity: 1,
       }).addTo(gateLayer);
-      // Inner dot
-      L.circleMarker([g.lat, g.lon], {
-        radius: r * 0.4,
+
+      L.circleMarker([gate.lat, gate.lon], {
+        radius: radius * 0.4,
         fillColor: inkColor,
         color: inkColor,
         weight: 0,
         fillOpacity: 1,
       }).addTo(gateLayer);
-      // Tier-1 ember halo
-      if (g.tier === 1) {
-        L.circleMarker([g.lat, g.lon], {
-          radius: r + 5,
+
+      if (gate.tier === 1) {
+        L.circleMarker([gate.lat, gate.lon], {
+          radius: radius + 5,
           fillOpacity: 0,
           color: accentColor,
           weight: 1,
           opacity: 0.5,
         }).addTo(gateLayer);
       }
-      marker.bindTooltip(
-        `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:600">${g.name}</div>
-         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;opacity:.6">Tier ${g.tier} · ${g.type}</div>`,
-        { direction: "top", offset: [0, -r - 2], className: "ntg-tip", permanent: false, sticky: false }
-      );
-      if (onGateClick) marker.on("click", () => onGateClick(g));
+
+      marker.bindTooltip(gateTooltip(gate), {
+        direction: "top",
+        offset: [0, -radius - 2],
+        className: "ntg-tip",
+        permanent: false,
+        sticky: false,
+      });
+
+      if (onGateClick) marker.on("click", () => onGateClick(gate));
     });
 
-    // Truck dots (last gate of each shipment)
-    shipments.forEach(s => {
-      if (s.status === "scheduled" || s.events.length < 1) return;
-      const isSelected = s.id === selectedShipmentId;
-      const last = shipmentData.GATE_BY_ID[s.events[s.events.length - 1].gate];
-      if (!last) return;
-      // Slight offset so dot doesn't sit exactly on gate
-      const latlng = [last.lat + 0.02, last.lon + 0.02];
+    shipments.forEach((shipment) => {
+      if (shipment.status === "scheduled" || shipment.events.length < 1) return;
+
+      const isSelected = shipment.id === selectedShipmentId;
+      const lastGate = shipmentData.GATE_BY_ID[shipment.events[shipment.events.length - 1].gate];
+      if (!lastGate) return;
+
+      const latlng = [lastGate.lat + 0.02, lastGate.lon + 0.02];
       const dot = L.circleMarker(latlng, {
         radius: isSelected ? 9 : 6,
         fillColor: isSelected ? accentColor : inkColor,
@@ -252,46 +275,26 @@ function LeafletDenmark({
         fillOpacity: 1,
         opacity: selectedShipmentId && !isSelected ? 0.2 : 1,
       }).addTo(dotLayer);
-      if (onShipmentClick) dot.on("click", () => onShipmentClick(s));
-      dot.bindTooltip(
-        `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600">${s.id}</div>
-         <div style="font-size:11px;margin-top:2px">${s.customer}</div>
-         <div style="font-size:10px;opacity:.6;margin-top:2px">${s.origin} → ${s.destination}</div>`,
-        { direction: "top", offset: [0, -10], className: "ntg-tip" }
-      );
+
+      if (onShipmentClick) dot.on("click", () => onShipmentClick(shipment));
+      dot.bindTooltip(shipmentTooltip(shipment), {
+        direction: "top",
+        offset: [0, -10],
+        className: "ntg-tip",
+      });
     });
   }, [gates, corridors, shipments, selectedShipmentId, visibleTiers, inkColor, paperColor, accentColor, onShipmentClick, onGateClick, ready]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height, background: dark ? "#1a1c20" : "#eef0ec" }}>
-      <div ref={ref} style={{ position: "absolute", inset: 0 }} />
+    <div className={`ntg-map-shell ntg-map-shell--leaflet ${mapHeightClass(height)}`} data-dark={dark ? "true" : "false"}>
+      <div ref={ref} className="ntg-map-canvas" />
       {!ready && (
-        <div style={{
-          position: "absolute", inset: 0, display: "grid", placeItems: "center",
-          color: inkColor, fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase",
-          opacity: 0.68, zIndex: 450, textAlign: "center", padding: 24,
-        }}>
+        <div className="ntg-map-loading">
           {loadError || "Loading live map"}
         </div>
       )}
-      {/* Floating overlay: title + scale */}
-      <div style={{
-        position: "absolute", top: 16, left: 16, zIndex: 500,
-        fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-        letterSpacing: "0.12em", textTransform: "uppercase",
-        color: inkColor, background: `${paperColor}d8`, padding: "6px 10px",
-        backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
-      }}>
-        Live network · Denmark · OSM
-      </div>
-      <div style={{
-        position: "absolute", bottom: 8, left: 8, zIndex: 500,
-        fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
-        color: inkColor, opacity: 0.55,
-      }}>
-        © OpenStreetMap · CARTO
-      </div>
+      <div className="ntg-map-chip ntg-map-chip--top-left">Live network / Denmark / OSM</div>
+      <div className="ntg-map-attribution">OpenStreetMap / CARTO</div>
     </div>
   );
 }

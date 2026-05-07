@@ -61,12 +61,14 @@ function ensureLeafletRuntime() {
 
   fallbackLeafletPromise = new Promise((resolve, reject) => {
     if (window.L) return resolve(window.L);
+
     if (!document.querySelector(`link[href="${cssUrl}"]`)) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = cssUrl;
       document.head.appendChild(link);
     }
+
     const script = document.createElement("script");
     script.src = jsUrl;
     script.onload = () => resolve(window.L);
@@ -77,6 +79,10 @@ function ensureLeafletRuntime() {
   return fallbackLeafletPromise;
 }
 
+function mapHeightClass(height) {
+  return `ntg-map-height-${Math.round(height)}`;
+}
+
 function routeStyle(type, palette) {
   if (type === "primary") {
     return { color: palette.primary, weight: 4.8, opacity: 0.92 };
@@ -85,6 +91,13 @@ function routeStyle(type, palette) {
     return { color: palette.secondary, weight: 3.2, opacity: 0.84 };
   }
   return { color: palette.ferry, weight: 2.8, opacity: 0.82, dashArray: "10 8" };
+}
+
+function locationTooltip(location) {
+  return `<div class="ntg-tip-card">
+    <div class="ntg-tip-title">${location.title}</div>
+    <div class="ntg-tip-subtitle">${location.role}</div>
+  </div>`;
 }
 
 async function fetchEuropeanRoute(route) {
@@ -149,7 +162,6 @@ function EuropeNetworkMap({
     ferry: dark ? "#bcc6d4" : "#5f6b7a",
     hubFill: dark ? "#f8fafc" : "#fef6ea",
     hubStroke: dark ? "#0f172a" : inkColor,
-    glow: dark ? "rgba(249, 115, 91, 0.18)" : "rgba(194, 65, 12, 0.16)",
   }), [accentColor, dark, inkColor]);
 
   React.useEffect(() => {
@@ -228,10 +240,11 @@ function EuropeNetworkMap({
         }).addTo(markersLayer);
       }
 
-      marker.bindTooltip(
-        `<div style="font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase; font-weight:600">${location.title}</div><div style="font-family:'JetBrains Mono', monospace; font-size:9px; opacity:.68">${location.role}</div>`,
-        { direction: "top", offset: [0, -radius - 2], className: "ntg-tip" }
-      );
+      marker.bindTooltip(locationTooltip(location), {
+        direction: "top",
+        offset: [0, -radius - 2],
+        className: "ntg-tip",
+      });
       marker.bindPopup(`<strong>${location.title}</strong><br>${location.role}`);
     });
 
@@ -248,11 +261,12 @@ function EuropeNetworkMap({
         if (resolved.source === "live") live += 1;
         if (resolved.source === "fallback") fallback += 1;
 
-        const polyline = L.polyline(resolved.coords, routeStyle(route.type, palette)).addTo(routesLayer);
+        const baseStyle = routeStyle(route.type, palette);
+        const polyline = L.polyline(resolved.coords, baseStyle).addTo(routesLayer);
         polyline.bindPopup(`<strong>${route.label}</strong><br>${route.type[0].toUpperCase()}${route.type.slice(1)} corridor`);
         polyline.bindTooltip(route.label, { sticky: true, className: "ntg-tip" });
-        polyline.on("mouseover", () => polyline.setStyle({ weight: routeStyle(route.type, palette).weight + 1.4, opacity: 1 }));
-        polyline.on("mouseout", () => polyline.setStyle(routeStyle(route.type, palette)));
+        polyline.on("mouseover", () => polyline.setStyle({ weight: baseStyle.weight + 1.4, opacity: 1 }));
+        polyline.on("mouseout", () => polyline.setStyle(baseStyle));
       });
 
       setRouteStatus({
@@ -277,103 +291,37 @@ function EuropeNetworkMap({
         : "All corridors resolved with live road routing";
 
   return (
-    <div style={{ position: "relative", width: "100%", height, background: dark ? "#171a21" : "#edf2f7" }}>
-      <div ref={ref} style={{ position: "absolute", inset: 0 }} />
+    <div className={`ntg-map-shell ntg-map-shell--europe ${mapHeightClass(height)}`} data-dark={dark ? "true" : "false"}>
+      <div ref={ref} className="ntg-map-canvas" />
 
-      <div style={{
-        position: "absolute",
-        top: 16,
-        left: 16,
-        zIndex: 500,
-        display: "grid",
-        gap: 10,
-        width: "min(320px, calc(100% - 32px))",
-      }}>
-        <div style={{
-          padding: "12px 14px",
-          borderRadius: 18,
-          background: dark ? "rgba(12, 15, 20, 0.78)" : "rgba(255, 252, 247, 0.86)",
-          border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`,
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          boxShadow: `0 22px 40px ${palette.glow}`,
-        }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: inkColor, opacity: 0.68 }}>
-            Imported network map
-          </div>
-          <div style={{ marginTop: 8, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 28, lineHeight: 0.96, color: inkColor }}>
-            NTG Europe corridor view
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: inkColor, opacity: 0.72 }}>
+      <div className="ntg-europe-overlay-stack">
+        <div className="ntg-europe-overlay-card ntg-europe-overlay-card--hero">
+          <div className="ntg-eyebrow">Imported network map</div>
+          <div className="ntg-europe-overlay-title">NTG Europe corridor view</div>
+          <div className="ntg-europe-overlay-copy">
             Real road routing for the broader NTG network, layered into the dashboard without leaving the app.
           </div>
         </div>
 
-        <div style={{
-          padding: "12px 14px",
-          borderRadius: 18,
-          background: dark ? "rgba(12, 15, 20, 0.72)" : "rgba(255, 255, 255, 0.82)",
-          border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`,
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          display: "grid",
-          gap: 8,
-        }}>
+        <div className="ntg-europe-overlay-card ntg-europe-overlay-card--legend">
           {[
-            { label: "Primary corridors", tone: palette.primary, dashed: false },
-            { label: "Secondary routes", tone: palette.secondary, dashed: false },
-            { label: "Ferry segment", tone: palette.ferry, dashed: true },
+            { label: "Primary corridors", type: "primary" },
+            { label: "Secondary routes", type: "secondary" },
+            { label: "Ferry segment", type: "ferry" },
           ].map((item) => (
-            <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: inkColor }}>
-              <span style={{
-                width: 34,
-                height: 10,
-                borderRadius: 999,
-                border: item.dashed ? `1px solid ${item.tone}` : "none",
-                background: item.dashed
-                  ? `repeating-linear-gradient(90deg, ${item.tone} 0 8px, transparent 8px 14px)`
-                  : item.tone,
-              }} />
+            <div key={item.label} className="ntg-europe-legend-row">
+              <span className="ntg-europe-legend-swatch" data-type={item.type} />
               <span>{item.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{
-        position: "absolute",
-        right: 16,
-        top: 16,
-        zIndex: 500,
-        padding: "10px 12px",
-        borderRadius: 16,
-        background: dark ? "rgba(12, 15, 20, 0.74)" : "rgba(255, 255, 255, 0.84)",
-        border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`,
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        color: inkColor,
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 10,
-        letterSpacing: "0.08em",
-        textTransform: "uppercase",
-        maxWidth: 260,
-      }}>
+      <div className="ntg-map-status-pill">
         {statusLabel}
       </div>
 
-      <div style={{
-        position: "absolute",
-        left: 16,
-        bottom: 12,
-        zIndex: 500,
-        padding: "9px 11px",
-        borderRadius: 14,
-        background: dark ? "rgba(12, 15, 20, 0.68)" : "rgba(255, 255, 255, 0.8)",
-        border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`,
-        color: inkColor,
-        fontSize: 11,
-        lineHeight: 1.45,
-      }}>
+      <div className="ntg-map-footnote">
         19 locations, 20 routes, OSRM road geometry with straight-line fallback.
       </div>
     </div>

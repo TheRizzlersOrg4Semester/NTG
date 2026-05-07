@@ -6,7 +6,6 @@ const { useMemo } = React;
 const shipmentData = NTG.domain.shipments.data;
 const shipmentService = NTG.domain.shipments.service;
 const { LeafletDenmark, DenmarkMap, EuropeNetworkMap } = NTG.features.maps;
-const { cardStyle } = NTG.app.theme;
 const { fmtDate, fmtTime } = NTG.shared.utils.formatters;
 const { HeroChip, HeroMetric, BigKPI, MapBadge, SignalTile, Thesis } = NTG.features.dashboard.ui;
 
@@ -24,7 +23,6 @@ function Overview({
   onSimulate,
   layout,
 }) {
-  const pad = tweaks.density === "compact" ? 18 : tweaks.density === "comfy" ? 28 : 22;
   const isCustomerView = audienceMode === "customer";
   const customerGateIds = useMemo(() => new Set(shipments.flatMap((shipment) => shipment.route)), [shipments]);
   const mapGates = isCustomerView ? shipmentData.GATES.filter((gate) => customerGateIds.has(gate.id)) : shipmentData.GATES;
@@ -41,130 +39,64 @@ function Overview({
   const mapHeight = layout.isNarrow ? 360 : layout.isTablet ? 420 : 540;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
-      <section style={{
-        ...cardStyle(theme, {
-          background: `linear-gradient(135deg, ${theme.panelSolid} 0%, ${theme.surfaceAlt} 100%)`,
-          radius: 34,
-          shadow: theme.shadow,
-        }),
-        padding: layout.isNarrow ? 22 : 30,
-        overflow: "hidden",
-        position: "relative",
-      }}>
-        <div style={{
-          position: "absolute",
-          right: -80,
-          top: -60,
-          width: 260,
-          height: 260,
-          borderRadius: "50%",
-          background: `radial-gradient(circle, ${theme.accentWash} 0%, transparent 68%)`,
-        }} />
-        <div style={{
-          position: "absolute",
-          left: "18%",
-          bottom: -120,
-          width: 280,
-          height: 280,
-          borderRadius: "50%",
-          background: `radial-gradient(circle, ${theme.info}18 0%, transparent 70%)`,
-        }} />
+    <div className="ntg-overview">
+      <section className="ntg-panel ntg-overview-hero">
+        <div className="ntg-overview-glow ntg-overview-glow--accent" />
+        <div className="ntg-overview-glow ntg-overview-glow--info" />
 
-        <div style={{
-          position: "relative",
-          display: "grid",
-          gridTemplateColumns: layout.isTablet ? "1fr" : "minmax(0, 1.55fr) 340px",
-          gap: 18,
-          alignItems: "stretch",
-        }}>
+        <div className="ntg-overview-hero-grid">
           <div>
-            <div style={{ fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: theme.inkMuted, fontFamily: "'JetBrains Mono', monospace" }}>
+            <div className="ntg-eyebrow">
               {isCustomerView ? `Customer portal / ${customerName}` : "Pilot dashboard / Denmark freight network"}
             </div>
-            <h1 style={{
-              margin: "18px 0 0",
-              fontFamily: "'Instrument Serif', Georgia, serif",
-              fontSize: layout.isNarrow ? 44 : layout.isMobile ? 58 : 72,
-              lineHeight: 0.95,
-              letterSpacing: "-0.045em",
-              fontWeight: 400,
-              maxWidth: 760,
-            }}>
+            <h1 className="ntg-heading-display ntg-overview-heading">
               {isCustomerView ? "Premium shipment visibility for your own freight." : "A more polished control room for checkpoint-led freight intelligence."}
             </h1>
-            <p style={{ margin: "18px 0 0", maxWidth: 640, fontSize: 15, lineHeight: 1.72, color: theme.inkMuted }}>
+            <p className="ntg-overview-copy">
               {isCustomerView
                 ? "Follow confirmed milestone events without exposing sensitive network data. The view stays clean, current, and focused on the shipments your team actually needs."
                 : "Instead of waiting for manual updates, the network itself confirms movement. Bridges, ports, terminals, and customer checkpoints create a calmer operational picture with time-stamped proof of progress."}
             </p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 22 }}>
-              <HeroChip label="Tracked shipments" value={shipments.length} theme={theme} />
-              <HeroChip label="Live corridors" value={activeCorridors} theme={theme} />
-              <HeroChip label={isCustomerView ? "Milestones confirmed" : "Coverage confidence"} value={isCustomerView ? recent.length : `${trackedCoverage}%`} theme={theme} />
+            <div className="ntg-overview-chip-row">
+              <HeroChip label="Tracked shipments" value={shipments.length} />
+              <HeroChip label="Live corridors" value={activeCorridors} />
+              <HeroChip label={isCustomerView ? "Milestones confirmed" : "Coverage confidence"} value={isCustomerView ? recent.length : `${trackedCoverage}%`} />
             </div>
           </div>
 
-          <div style={{
-            ...cardStyle(theme, {
-              background: "rgba(255,255,255,0.03)",
-              borderColor: theme.lineStrong,
-              radius: 28,
-              shadow: "none",
-            }),
-            padding: layout.isNarrow ? 18 : 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
-          }}>
+          <div className="ntg-panel ntg-overview-brief">
             <div>
-              <div style={{ fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: theme.inkMuted, fontFamily: "'JetBrains Mono', monospace" }}>
-                Operational brief
-              </div>
-              <div style={{ marginTop: 10, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 34, lineHeight: 0.98, letterSpacing: "-0.03em" }}>
+              <div className="ntg-eyebrow">Operational brief</div>
+              <div className="ntg-overview-brief-title">
                 {isCustomerView ? "Cleaner customer tracking." : "Executive-grade signal, not noise."}
               </div>
             </div>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              <HeroMetric label="Attention needed" value={highlightedAttention} sub="Shipments requiring operator review" theme={theme} tone={theme.warning} />
-              <HeroMetric label="Live now" value={stats.inTransit} sub="Tracked loads still moving across the network" theme={theme} tone={theme.info} />
-              <HeroMetric label="Current timestamp" value={`${fmtDate(now)} ${fmtTime(now)}`} sub="Synthetic live timeline" theme={theme} tone={theme.success} mono />
+            <div className="ntg-overview-brief-metrics">
+              <HeroMetric label="Attention needed" value={highlightedAttention} sub="Shipments requiring operator review" tone="warning" />
+              <HeroMetric label="Live now" value={stats.inTransit} sub="Tracked loads still moving across the network" tone="info" />
+              <HeroMetric label="Current timestamp" value={`${fmtDate(now)} ${fmtTime(now)}`} sub="Synthetic live timeline" tone="success" mono />
             </div>
           </div>
         </div>
       </section>
 
-      <section style={{
-        display: "grid",
-        gridTemplateColumns: layout.isNarrow ? "1fr" : layout.isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-        gap: 14,
-      }}>
-        <BigKPI label="In transit" value={stats.inTransit} note="Actively progressing right now" theme={theme} tone={theme.info} delay={0} />
-        <BigKPI label="At risk" value={stats.atRisk} note="Potentially late or degraded" theme={theme} tone={theme.warning} delay={0.04} />
-        <BigKPI label="Exceptions" value={stats.exception} note="Requires immediate action" theme={theme} tone={theme.danger} delay={0.08} />
-        <BigKPI label="Delivered 24h" value={stats.delivered} note="Successfully closed milestones" theme={theme} tone={theme.success} delay={0.12} />
+      <section className="ntg-kpi-grid">
+        <BigKPI label="In transit" value={stats.inTransit} note="Actively progressing right now" tone="info" delay={0} />
+        <BigKPI label="At risk" value={stats.atRisk} note="Potentially late or degraded" tone="warning" delay={0.04} />
+        <BigKPI label="Exceptions" value={stats.exception} note="Requires immediate action" tone="danger" delay={0.08} />
+        <BigKPI label="Delivered 24h" value={stats.delivered} note="Successfully closed milestones" tone="success" delay={0.12} />
       </section>
 
-      <section style={{
-        display: "grid",
-        gridTemplateColumns: layout.isTablet ? "1fr" : "minmax(0, 1.35fr) 360px",
-        gap: 18,
-        alignItems: "start",
-      }}>
-        <div style={{
-          ...cardStyle(theme, { background: theme.panel, radius: 30 }),
-          padding: pad,
-          overflow: "hidden",
-          minWidth: 0,
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+      <section className="ntg-overview-network">
+        <div className="ntg-panel ntg-overview-map-panel">
+          <div className="ntg-overview-panel-header">
             <div>
-              <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: theme.inkMuted, fontFamily: "'JetBrains Mono', monospace" }}>
+              <div className="ntg-eyebrow">
                 {isCustomerView ? "Route confirmation" : isEuropeNetwork ? "Imported network view" : "Network view"}
               </div>
-              <div style={{ marginTop: 6, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 30, lineHeight: 0.98, letterSpacing: "-0.03em" }}>
+              <div className="ntg-overview-panel-title">
                 {isCustomerView
                   ? "Your milestone footprint across Denmark"
                   : isEuropeNetwork
@@ -172,7 +104,7 @@ function Overview({
                     : "Checkpoint activity across the pilot corridors"}
               </div>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div className="ntg-map-badge-row">
               <MapBadge
                 label={
                   isEuropeNetwork
@@ -183,32 +115,18 @@ function Overview({
                         ? "Geographic view"
                         : "Schematic view"
                 }
-                theme={theme}
               />
-              <MapBadge label={isEuropeNetwork ? "19 hubs visible" : `${mapGates.length} gates visible`} theme={theme} accent />
+              <MapBadge label={isEuropeNetwork ? "19 hubs visible" : `${mapGates.length} gates visible`} accent />
             </div>
           </div>
 
           {requestedEuropeNetwork && isCustomerView && (
-            <div style={{
-              marginBottom: 14,
-              padding: "11px 12px",
-              borderRadius: 18,
-              background: theme.surface,
-              border: `1px solid ${theme.line}`,
-              fontSize: 12,
-              color: theme.inkMuted,
-            }}>
+            <div className="ntg-overview-note">
               The Europe network view is kept internal-only, so customer mode stays focused on the shipment route footprint.
             </div>
           )}
 
-          <div style={{
-            borderRadius: 26,
-            overflow: "hidden",
-            border: `1px solid ${theme.line}`,
-            background: theme.paper,
-          }}>
+          <div className="ntg-overview-map-frame">
             {isEuropeNetwork ? (
               <EuropeNetworkMap
                 height={mapHeight}
@@ -250,77 +168,41 @@ function Overview({
           </div>
         </div>
 
-        <aside style={{
-          ...cardStyle(theme, { background: theme.panel, radius: 30 }),
-          padding: pad,
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          minWidth: 0,
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <aside className="ntg-panel ntg-overview-feed-panel">
+          <div className="ntg-overview-feed-header">
             <div>
-              <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: theme.inkMuted, fontFamily: "'JetBrains Mono', monospace" }}>
+              <div className="ntg-eyebrow">
                 {isCustomerView ? "Recent confirmations" : "Recent gate events"}
               </div>
-              <div style={{ marginTop: 6, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 28, lineHeight: 0.98, letterSpacing: "-0.03em" }}>
-                Live event feed
-              </div>
+              <div className="ntg-overview-feed-title">Live event feed</div>
             </div>
             {!isCustomerView && (
-              <button
-                onClick={onSimulate}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 16,
-                  background: theme.accentWash,
-                  color: theme.accent,
-                  border: `1px solid ${theme.lineStrong}`,
-                  cursor: "pointer",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: "0.10em",
-                  textTransform: "uppercase",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              >
+              <button onClick={onSimulate} className="ntg-simulate-button">
                 Simulate
               </button>
             )}
           </div>
 
-          <div className="ntg-scroll" style={{ display: "grid", gap: 10, maxHeight: mapHeight - 40, overflow: "auto", paddingRight: 2 }}>
+          <div className="ntg-scroll ntg-feed-list">
             {recent.map(({ shipment, event }, index) => {
               const gate = shipmentData.GATE_BY_ID[event.gate];
               return (
                 <button
                   key={`${shipment.id}-${index}`}
                   onClick={() => setSelected(shipment)}
-                  className="ntg-interactive-card is-soft"
-                  style={{
-                    ...cardStyle(theme, {
-                      background: theme.surface,
-                      radius: 22,
-                      shadow: "none",
-                    }),
-                    padding: "14px 15px",
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
+                  className="ntg-panel ntg-interactive-card is-soft ntg-feed-card"
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: theme.accent, display: "inline-block" }} />
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{gate?.name}</span>
+                  <div className="ntg-feed-card-header">
+                    <div className="ntg-feed-card-gate">
+                      <span className="ntg-dot ntg-tone-accent" />
+                      <span className="ntg-feed-card-gate-name">{gate?.name}</span>
                     </div>
-                    <span style={{ fontSize: 10, color: theme.inkMuted, fontFamily: "'JetBrains Mono', monospace" }}>
-                      {fmtTime(event.timestamp)}
-                    </span>
+                    <span className="ntg-feed-card-time">{fmtTime(event.timestamp)}</span>
                   </div>
-                  <div style={{ marginTop: 9, fontSize: 12, color: theme.inkMuted }}>
+                  <div className="ntg-feed-card-meta">
                     {shipment.id} / {shipment.customer}
                   </div>
-                  <div style={{ marginTop: 6, fontSize: 10, color: theme.inkSoft, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.04em" }}>
+                  <div className="ntg-feed-card-confidence">
                     confidence {event.confidence.toFixed(2)}
                   </div>
                 </button>
@@ -328,35 +210,28 @@ function Overview({
             })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <SignalTile label="Event cadence" value={recent.length} sub="Most recent confirmations in feed" theme={theme} />
-            <SignalTile label="Attention" value={highlightedAttention} sub="Loads needing human review" theme={theme} accent={theme.warning} />
+          <div className="ntg-signal-grid">
+            <SignalTile label="Event cadence" value={recent.length} sub="Most recent confirmations in feed" />
+            <SignalTile label="Attention" value={highlightedAttention} sub="Loads needing human review" tone="warning" />
           </div>
         </aside>
       </section>
 
-      <section style={{
-        display: "grid",
-        gridTemplateColumns: layout.isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-        gap: 14,
-      }}>
+      <section className="ntg-thesis-grid">
         <Thesis
           n="01"
           title="Passive, not dependent"
           body="Visibility no longer relies on driver compliance or manual scans. The infrastructure confirms progress on its own."
-          theme={theme}
         />
         <Thesis
           n="02"
           title="Few checkpoints, broad coverage"
           body="A limited set of strategic chokepoints captures a disproportionate share of the network. The story stays simple and scalable."
-          theme={theme}
         />
         <Thesis
           n="03"
           title="Evidence over surveillance"
           body="The product focuses on trusted milestone events rather than continuous monitoring, which keeps the experience premium and easier to govern."
-          theme={theme}
         />
       </section>
     </div>

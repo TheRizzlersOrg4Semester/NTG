@@ -3,301 +3,186 @@ NTG.features = NTG.features || {};
 NTG.features.shipments = NTG.features.shipments || {};
 
 const { useState, useMemo, useDeferredValue } = React;
-const { fmtTime, fmtDate, fmtDelta, statusLabel, statusDot } = NTG.shared.utils.formatters;
+const { fmtTime, fmtDate, fmtDelta, statusLabel } = NTG.shared.utils.formatters;
 const shipmentData = NTG.domain.shipments.data;
 const { DenmarkMap, LeafletDenmark } = NTG.features.maps;
 
-const VIEW_GLASS_FILTER = "blur(22px) saturate(140%)";
+const STATUS_TONES = {
+  scheduled: "muted",
+  "in-transit": "info",
+  "at-risk": "warning",
+  exception: "danger",
+  delivered: "success",
+};
 
-function panelStyle(theme, options = {}) {
-  return {
-    background: options.background || theme.panel,
-    border: `1px solid ${options.borderColor || theme.line}`,
-    borderRadius: options.radius || 28,
-    boxShadow: options.shadow === undefined ? theme.softShadow : options.shadow,
-    backdropFilter: VIEW_GLASS_FILTER,
-    WebkitBackdropFilter: VIEW_GLASS_FILTER,
-    ...options.style,
-  };
+function statusTone(status) {
+  return STATUS_TONES[status] || "default";
 }
 
-function titleStyle(size = 36) {
-  return {
-    margin: 0,
-    fontFamily: "'Instrument Serif', Georgia, serif",
-    fontWeight: 400,
-    fontSize: size,
-    lineHeight: 0.98,
-    letterSpacing: "-0.03em",
-  };
+function reliabilityTone(reliability) {
+  if (reliability > 0.95) return "success";
+  if (reliability > 0.93) return "accent";
+  return "warning";
 }
 
-function bodyCopy(theme) {
-  return { fontSize: 13, lineHeight: 1.68, color: theme.inkMuted };
+function deltaTrend(value) {
+  if (value.startsWith("-")) return "improving";
+  if (value.startsWith("+")) return "slipping";
+  return "steady";
 }
 
-function smallLabel(theme) {
-  return {
-    fontSize: 10,
-    letterSpacing: "0.12em",
-    textTransform: "uppercase",
-    color: theme.inkMuted,
-    fontFamily: "'JetBrains Mono', monospace",
-  };
-}
-
-function softInputStyle(theme) {
-  return {
-    width: "100%",
-    padding: "13px 14px 13px 38px",
-    borderRadius: 18,
-    border: `1px solid ${theme.line}`,
-    background: theme.surface,
-    color: theme.ink,
-    outline: "none",
-    fontSize: 13,
-  };
-}
-
-function ShipmentList({ shipments, onSelect, selectedId, density, accent, ink, paper, now, theme, layout }) {
+function ShipmentList({ shipments, onSelect, selectedId, density, now }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
   const deferredQuery = useDeferredValue(q);
+
   const filtered = useMemo(() => {
     return shipments.filter((shipment) => {
       if (filter !== "all" && shipment.status !== filter) return false;
       if (!deferredQuery) return true;
+
       const haystack = `${shipment.id} ${shipment.customer} ${shipment.origin} ${shipment.destination} ${shipment.plate}`.toLowerCase();
       return haystack.includes(deferredQuery.toLowerCase());
     });
   }, [shipments, deferredQuery, filter]);
 
-  const pad = density === "compact" ? 18 : density === "comfy" ? 28 : 22;
   const filters = [
     { id: "all", label: "All", count: shipments.length },
-    { id: "in-transit", label: "In transit", count: shipments.filter((s) => s.status === "in-transit").length },
-    { id: "at-risk", label: "At risk", count: shipments.filter((s) => s.status === "at-risk").length },
-    { id: "exception", label: "Exception", count: shipments.filter((s) => s.status === "exception").length },
-    { id: "delivered", label: "Delivered", count: shipments.filter((s) => s.status === "delivered").length },
-    { id: "scheduled", label: "Scheduled", count: shipments.filter((s) => s.status === "scheduled").length },
+    { id: "in-transit", label: "In transit", count: shipments.filter((shipment) => shipment.status === "in-transit").length },
+    { id: "at-risk", label: "At risk", count: shipments.filter((shipment) => shipment.status === "at-risk").length },
+    { id: "exception", label: "Exception", count: shipments.filter((shipment) => shipment.status === "exception").length },
+    { id: "delivered", label: "Delivered", count: shipments.filter((shipment) => shipment.status === "delivered").length },
+    { id: "scheduled", label: "Scheduled", count: shipments.filter((shipment) => shipment.status === "scheduled").length },
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
-      <section style={{
-        ...panelStyle(theme, {
-          background: `linear-gradient(135deg, ${theme.panelSolid} 0%, ${theme.surfaceAlt} 100%)`,
-          radius: 32,
-          shadow: theme.shadow,
-        }),
-        padding: layout.isNarrow ? 22 : 28,
-        overflow: "hidden",
-        position: "relative",
-      }}>
-        <div style={{
-          position: "absolute",
-          right: -60,
-          top: -70,
-          width: 200,
-          height: 200,
-          borderRadius: "50%",
-          background: `radial-gradient(circle, ${theme.accentWash} 0%, transparent 70%)`,
-        }} />
-        <div style={{
-          position: "relative",
-          display: "grid",
-          gridTemplateColumns: layout.isNarrow ? "1fr" : "minmax(0, 1.2fr) 280px",
-          gap: 18,
-          alignItems: "end",
-        }}>
+    <div className="ntg-shipments-view" data-density={density}>
+      <section className="ntg-panel ntg-ops-hero">
+        <div className="ntg-ops-hero-orb" />
+        <div className="ntg-ops-hero-grid">
           <div>
-            <div style={smallLabel(theme)}>Operations workspace</div>
-            <h2 style={{ ...titleStyle(layout.isNarrow ? 40 : 48), marginTop: 14 }}>Shipment command</h2>
-            <p style={{ ...bodyCopy(theme), margin: "14px 0 0", maxWidth: 620 }}>
+            <div className="ntg-eyebrow">Operations workspace</div>
+            <h2 className="ntg-heading-section ntg-ops-hero-heading">Shipment command</h2>
+            <p className="ntg-copy ntg-ops-hero-copy">
               A cleaner table for searching, filtering, and opening the live narrative behind each tracked shipment.
             </p>
           </div>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-          }}>
-            <InsightCard label="Tracked" value={shipments.length} theme={theme} />
-            <InsightCard label="Moving" value={shipments.filter((s) => s.status === "in-transit").length} theme={theme} accent={theme.info} />
+
+          <div className="ntg-ops-hero-stats">
+            <InsightCard label="Tracked" value={shipments.length} />
+            <InsightCard label="Moving" value={shipments.filter((shipment) => shipment.status === "in-transit").length} tone="info" />
           </div>
         </div>
       </section>
 
-      <section style={{
-        ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-        padding: pad,
-        display: "grid",
-        gridTemplateColumns: layout.isNarrow ? "1fr" : "minmax(260px, 360px) minmax(0, 1fr)",
-        gap: 16,
-        alignItems: "start",
-      }}>
-        <div style={{ position: "relative" }}>
+      <section className="ntg-panel ntg-shipment-toolbar">
+        <div className="ntg-search-shell">
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(event) => setQ(event.target.value)}
             placeholder="Search shipment, customer, plate..."
-            style={softInputStyle(theme)}
+            className="ntg-search-input"
           />
-          <svg width="15" height="15" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: theme.inkMuted }} viewBox="0 0 16 16">
+          <svg width="15" height="15" className="ntg-search-icon" viewBox="0 0 16 16" aria-hidden="true">
             <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.4" />
             <line x1="11" y1="11" x2="14" y2="14" stroke="currentColor" strokeWidth="1.4" />
           </svg>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div className="ntg-filter-row">
           {filters.map((option) => {
             const active = filter === option.id;
             return (
               <button
                 key={option.id}
                 onClick={() => setFilter(option.id)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 999,
-                  background: active ? theme.surfaceAlt : theme.surface,
-                  color: active ? theme.ink : theme.inkMuted,
-                  border: `1px solid ${active ? theme.lineStrong : theme.line}`,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
+                className={`ntg-filter-chip${active ? " is-active" : ""}`}
+                data-status={option.id === "all" ? "all" : option.id}
               >
                 <span>{option.label}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: active ? theme.accent : theme.inkSoft }}>
-                  {option.count}
-                </span>
+                <span className="ntg-filter-chip-count">{option.count}</span>
               </button>
             );
           })}
         </div>
       </section>
 
-      <section style={{
-        ...panelStyle(theme, { background: theme.panel, radius: 30 }),
-        padding: 0,
-        overflow: "hidden",
-        flex: 1,
-        minHeight: 0,
-      }}>
-        <div style={{ overflowX: "auto", minHeight: "100%" }}>
-          <div style={{ minWidth: layout.isNarrow ? 880 : 980 }}>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "190px 1fr 1.2fr 110px 120px 96px 110px",
-              gap: 16,
-              padding: "16px 22px",
-              borderBottom: `1px solid ${theme.line}`,
-              background: theme.surface,
-              ...smallLabel(theme),
-            }}>
+      <section className="ntg-panel ntg-shipment-table-shell">
+        <div className="ntg-scroll ntg-shipment-table-scroll">
+          <div className="ntg-shipment-table">
+            <div className="ntg-shipment-table-head">
               <div>Shipment</div>
               <div>Customer</div>
               <div>Route</div>
               <div>Progress</div>
               <div>Last gate</div>
               <div>ETA</div>
-              <div style={{ textAlign: "right" }}>Status</div>
+              <div className="ntg-shipment-table-head-status">Status</div>
             </div>
 
             {filtered.map((shipment) => {
               const lastEvent = shipment.events[shipment.events.length - 1];
               const lastGate = lastEvent ? shipmentData.GATE_BY_ID[lastEvent.gate] : null;
               const selected = shipment.id === selectedId;
-              const pillColor = statusDot(shipment.status, accent);
 
               return (
-                <div
+                <button
                   key={shipment.id}
                   onClick={() => onSelect(shipment)}
-                  className={`ntg-table-row${selected ? " is-selected" : ""}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "190px 1fr 1.2fr 110px 120px 96px 110px",
-                    gap: 16,
-                    padding: "16px 22px",
-                    alignItems: "center",
-                    cursor: "pointer",
-                    borderBottom: `1px solid ${theme.line}`,
-                    background: selected ? theme.accentWash : "transparent",
-                  }}
+                  className={`ntg-table-row ntg-shipment-table-row${selected ? " is-selected" : ""}`}
+                  data-status={shipment.status}
                 >
-                  <div>
-                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, fontWeight: 600 }}>{shipment.id}</div>
-                    <div style={{ marginTop: 4, fontSize: 11, color: theme.inkMuted }}>{shipment.plate}</div>
+                  <div className="ntg-shipment-meta">
+                    <div className="ntg-shipment-id ntg-mono">{shipment.id}</div>
+                    <div className="ntg-shipment-subline">{shipment.plate}</div>
                   </div>
 
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shipment.customer}</div>
-                    <div style={{ marginTop: 5, fontSize: 11, color: theme.inkMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {shipment.cargo}
-                    </div>
+                    <div className="ntg-shipment-primary">{shipment.customer}</div>
+                    <div className="ntg-shipment-subline ntg-ellipsis">{shipment.cargo}</div>
                   </div>
 
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      <span>{shipment.origin}</span>
-                      <span style={{ color: theme.inkSoft }}>-></span>
-                      <span style={{ fontWeight: 600 }}>{shipment.destination}</span>
+                    <div className="ntg-shipment-path">
+                      <span className="ntg-ellipsis">{shipment.origin}</span>
+                      <span className="ntg-shipment-path-arrow">{"->"}</span>
+                      <span className="ntg-shipment-path-destination ntg-ellipsis">{shipment.destination}</span>
                     </div>
-                    <div style={{ marginTop: 6, fontSize: 10, color: theme.inkSoft, fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {shipment.route.join(" / ")}
-                    </div>
+                    <div className="ntg-shipment-route ntg-mono ntg-ellipsis">{shipment.route.join(" / ")}</div>
                   </div>
 
                   <div>
-                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, marginBottom: 6 }}>{Math.round(shipment.progress * 100)}%</div>
-                    <div style={{ height: 6, borderRadius: 999, background: theme.surface }}>
-                      <div style={{
-                        width: `${shipment.progress * 100}%`,
-                        height: "100%",
-                        borderRadius: 999,
-                        background: pillColor,
-                      }} />
-                    </div>
+                    <div className="ntg-shipment-progress-label ntg-mono">{Math.round(shipment.progress * 100)}%</div>
+                    <progress className="ntg-progress ntg-progress--compact" value={shipment.progress} max="1" data-status={shipment.status} />
                   </div>
 
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+                  <div className="ntg-shipment-mono-block ntg-mono">
                     {lastGate ? (
                       <>
-                        <div style={{ fontWeight: 600 }}>{lastGate.id}</div>
-                        <div style={{ marginTop: 4, color: theme.inkMuted }}>{fmtTime(lastEvent.timestamp)}</div>
+                        <div className="ntg-shipment-primary ntg-shipment-primary--mono">{lastGate.id}</div>
+                        <div className="ntg-shipment-subline">{fmtTime(lastEvent.timestamp)}</div>
                       </>
                     ) : (
-                      <span style={{ color: theme.inkSoft }}>Awaiting</span>
+                      <span className="ntg-shipments-muted">Awaiting</span>
                     )}
                   </div>
 
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
-                    <div>{fmtTime(shipment.eta)}</div>
-                    <div style={{ marginTop: 4, color: theme.inkMuted }}>{fmtDelta(shipment.eta, now)}</div>
+                  <div className="ntg-shipment-mono-block ntg-mono">
+                    <div className="ntg-shipment-primary ntg-shipment-primary--mono">{fmtTime(shipment.eta)}</div>
+                    <div className="ntg-shipment-subline">{fmtDelta(shipment.eta, now)}</div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <span style={{
-                      padding: "8px 10px",
-                      borderRadius: 999,
-                      background: `${pillColor}18`,
-                      color: pillColor,
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}>
+                  <div className="ntg-shipment-status-cell">
+                    <span className="ntg-status-pill" data-status={shipment.status}>
                       {statusLabel(shipment.status)}
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })}
 
             {filtered.length === 0 && (
-              <div style={{ padding: 68, textAlign: "center", color: theme.inkMuted }}>
+              <div className="ntg-shipments-empty-state">
                 No shipments match the current search and filters.
               </div>
             )}
@@ -308,8 +193,19 @@ function ShipmentList({ shipments, onSelect, selectedId, density, accent, ink, p
   );
 }
 
-function ShipmentDetail({ shipment, onClose, accent, ink, paper, now, density, mapVariant, visibleTiers, audienceMode = "internal", theme, layout }) {
-  const pad = density === "compact" ? 18 : density === "comfy" ? 28 : 22;
+function ShipmentDetail({
+  shipment,
+  onClose,
+  accent,
+  ink,
+  paper,
+  now,
+  density,
+  mapVariant,
+  visibleTiers,
+  audienceMode = "internal",
+  theme,
+}) {
   if (!shipment) return null;
 
   const isCustomerView = audienceMode === "customer";
@@ -320,146 +216,69 @@ function ShipmentDetail({ shipment, onClose, accent, ink, paper, now, density, m
   const lastEvent = shipment.events[lastEventIndex];
   const lastGate = lastEvent ? shipmentData.GATE_BY_ID[lastEvent.gate] : null;
   const nextGate = shipment.route[shipment.events.length] ? shipmentData.GATE_BY_ID[shipment.route[shipment.events.length]] : null;
+  const shipmentTone = statusTone(shipment.status);
 
   const segments = [];
-  for (let i = 0; i < shipment.events.length - 1; i += 1) {
-    const start = new Date(shipment.events[i].timestamp).getTime();
-    const end = new Date(shipment.events[i + 1].timestamp).getTime();
-    segments.push({ from: shipment.events[i].gate, to: shipment.events[i + 1].gate, duration: end - start });
+  for (let index = 0; index < shipment.events.length - 1; index += 1) {
+    const start = new Date(shipment.events[index].timestamp).getTime();
+    const end = new Date(shipment.events[index + 1].timestamp).getTime();
+    segments.push({ from: shipment.events[index].gate, to: shipment.events[index + 1].gate, duration: end - start });
   }
 
   return (
-    <div style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(2, 6, 23, 0.56)",
-      zIndex: 3000,
-      display: "flex",
-      justifyContent: "flex-end",
-      animation: "fadeIn 0.18s ease both",
-      backdropFilter: "blur(10px)",
-      WebkitBackdropFilter: "blur(10px)",
-    }}>
-      <div style={{
-        width: "min(920px, 96vw)",
-        height: "100%",
-        background: theme.paper,
-        color: theme.ink,
-        boxShadow: `-18px 0 72px rgba(2, 6, 23, 0.36)`,
-        animation: "slideIn 0.28s cubic-bezier(.2,.7,.3,1) both",
-        overflow: "auto",
-      }}>
-        <div style={{ padding: pad }}>
-          <div style={{
-            ...panelStyle(theme, {
-              background: `linear-gradient(135deg, ${theme.panelSolid} 0%, ${theme.surfaceAlt} 100%)`,
-              radius: 30,
-              shadow: "none",
-            }),
-            padding: layout.isNarrow ? 20 : 24,
-            position: "relative",
-            overflow: "hidden",
-          }}>
-            <div style={{
-              position: "absolute",
-              right: -40,
-              top: -50,
-              width: 160,
-              height: 160,
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${theme.accentWash} 0%, transparent 70%)`,
-            }} />
+    <div className="ntg-shipment-detail-backdrop ntg-fade-in">
+      <div className="ntg-shipment-detail-drawer ntg-slide-in">
+        <div className="ntg-shipment-detail-body" data-density={density}>
+          <div className="ntg-panel ntg-detail-hero">
+            <div className="ntg-detail-hero-orb" />
 
-            <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 240 }}>
-                <div style={smallLabel(theme)}>{shipment.id}</div>
-                <h2 style={{ ...titleStyle(layout.isNarrow ? 38 : 48), marginTop: 14 }}>
-                  {shipment.origin} <span style={{ color: accent }}>-></span> {shipment.destination}
+            <div className="ntg-detail-hero-header">
+              <div className="ntg-detail-hero-copy">
+                <div className="ntg-eyebrow">{shipment.id}</div>
+                <h2 className="ntg-heading-section ntg-detail-hero-title">
+                  {shipment.origin} <span className="ntg-detail-hero-arrow">{"->"}</span> {shipment.destination}
                 </h2>
-                <div style={{ marginTop: 10, fontSize: 14, color: theme.inkMuted }}>
+                <div className="ntg-detail-hero-meta">
                   {shipment.customer} / {shipment.cargo}
                 </div>
               </div>
 
-              <button
-                onClick={onClose}
-                style={{
-                  padding: "11px 14px",
-                  borderRadius: 16,
-                  background: theme.surface,
-                  color: theme.ink,
-                  border: `1px solid ${theme.line}`,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
-              >
+              <button onClick={onClose} className="ntg-interactive-button ntg-detail-close">
                 Close
               </button>
             </div>
           </div>
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: layout.isNarrow ? "1fr" : "repeat(4, minmax(0, 1fr))",
-            gap: 12,
-            marginTop: 16,
-          }}>
-            <Stat label="Status" value={statusLabel(shipment.status)} accent={statusDot(shipment.status, accent)} theme={theme} />
-            <Stat label="ETA" value={fmtTime(shipment.eta)} sub={`${fmtDate(shipment.eta)} / ${fmtDelta(shipment.eta, now)}`} theme={theme} />
+          <div className="ntg-detail-stat-grid">
+            <Stat label="Status" value={statusLabel(shipment.status)} tone={shipmentTone} />
+            <Stat label="ETA" value={fmtTime(shipment.eta)} sub={`${fmtDate(shipment.eta)} / ${fmtDelta(shipment.eta, now)}`} />
             {isCustomerView ? (
-              <Stat label="Reference" value={shipment.id.replace("NTG-", "")} sub="Shipment tracking reference" theme={theme} mono />
+              <Stat label="Reference" value={shipment.id.replace("NTG-", "")} sub="Shipment tracking reference" mono />
             ) : (
-              <Stat label="Vehicle" value={shipment.plate} sub={shipment.carrier} theme={theme} mono />
+              <Stat label="Vehicle" value={shipment.plate} sub={shipment.carrier} mono />
             )}
-            <Stat label="Weight" value={`${(shipment.weightKg / 1000).toFixed(1)} t`} sub={`${shipment.events.length} of ${shipment.route.length} milestones confirmed`} theme={theme} mono />
+            <Stat label="Weight" value={`${(shipment.weightKg / 1000).toFixed(1)} t`} sub={`${shipment.events.length} of ${shipment.route.length} milestones confirmed`} mono />
           </div>
 
           {shipment.flags && shipment.flags.length > 0 && (
-            <div style={{
-              ...panelStyle(theme, {
-                background: `${statusDot(shipment.status, accent)}14`,
-                borderColor: `${statusDot(shipment.status, accent)}44`,
-                radius: 24,
-                shadow: "none",
-              }),
-              padding: "16px 18px",
-              marginTop: 16,
-              display: "flex",
-              gap: 12,
-              alignItems: "flex-start",
-            }}>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: statusDot(shipment.status, accent), display: "inline-block", marginTop: 6 }} />
+            <div className="ntg-panel ntg-detail-flag" data-status={shipment.status}>
+              <span className="ntg-detail-flag-dot" />
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Operational flag</div>
-                <div style={{ color: theme.inkMuted, fontSize: 13, lineHeight: 1.6 }}>{shipment.flags.join(" / ")}</div>
+                <div className="ntg-detail-flag-title">Operational flag</div>
+                <div className="ntg-detail-flag-copy">{shipment.flags.join(" / ")}</div>
               </div>
             </div>
           )}
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: layout.isTablet ? "1fr" : "minmax(0, 1.15fr) 320px",
-            gap: 16,
-            marginTop: 16,
-          }}>
-            <div style={{
-              ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-              padding: pad,
-              overflow: "hidden",
-            }}>
-              <SectionLabel theme={theme}>Route on network</SectionLabel>
+          <div className="ntg-detail-panels">
+            <div className="ntg-panel ntg-detail-map-panel">
+              <SectionLabel>Route on network</SectionLabel>
               {mapVariant === "europe-network" && (
-                <div style={{ marginBottom: 12, fontSize: 11, lineHeight: 1.55, color: theme.inkMuted }}>
+                <div className="ntg-detail-map-note">
                   Shipment detail stays on the Denmark route map so checkpoint-level progress remains precise.
                 </div>
               )}
-              <div style={{
-                borderRadius: 24,
-                overflow: "hidden",
-                border: `1px solid ${theme.line}`,
-                background: theme.paper,
-              }}>
+              <div className="ntg-detail-map-frame">
                 {detailMapVariant === "geographic" ? (
                   <LeafletDenmark
                     gates={shipmentData.GATES.filter((gate) => shipment.route.includes(gate.id) || gate.tier === 1)}
@@ -492,88 +311,62 @@ function ShipmentDetail({ shipment, onClose, accent, ink, paper, now, density, m
               </div>
             </div>
 
-            <div style={{
-              ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-              padding: pad,
-              display: "grid",
-              gap: 12,
-              alignContent: "start",
-            }}>
-              <SectionLabel theme={theme}>Routing brief</SectionLabel>
-              <DetailLine label="Last confirmed" value={lastGate ? `${lastGate.name} at ${fmtTime(lastEvent.timestamp)}` : "Awaiting first checkpoint"} theme={theme} />
-              <DetailLine label="Next expected" value={nextGate ? nextGate.name : "Final milestone reached"} theme={theme} accent={nextGate ? theme.info : theme.success} />
-              <DetailLine label={isCustomerView ? "Milestones" : "Checkpoints"} value={`${shipment.events.length} confirmed of ${shipment.route.length}`} theme={theme} />
-              <DetailLine label="Customer" value={shipment.customer} theme={theme} />
-              {!isCustomerView && <DetailLine label="Carrier" value={shipment.carrier} theme={theme} />}
+            <div className="ntg-panel ntg-detail-brief-panel">
+              <SectionLabel>Routing brief</SectionLabel>
+              <DetailLine label="Last confirmed" value={lastGate ? `${lastGate.name} at ${fmtTime(lastEvent.timestamp)}` : "Awaiting first checkpoint"} />
+              <DetailLine label="Next expected" value={nextGate ? nextGate.name : "Final milestone reached"} tone={nextGate ? "info" : "success"} />
+              <DetailLine label={isCustomerView ? "Milestones" : "Checkpoints"} value={`${shipment.events.length} confirmed of ${shipment.route.length}`} />
+              <DetailLine label="Customer" value={shipment.customer} />
+              {!isCustomerView && <DetailLine label="Carrier" value={shipment.carrier} />}
             </div>
           </div>
 
-          <div style={{
-            ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-            padding: pad,
-            marginTop: 16,
-          }}>
-            <SectionLabel theme={theme}>{isCustomerView ? "Milestone timeline" : "Gate event timeline"}</SectionLabel>
-            <div style={{ position: "relative", paddingLeft: 28 }}>
-              <div style={{ position: "absolute", left: 8, top: 8, bottom: 8, width: 1, background: theme.lineStrong }} />
+          <div className="ntg-panel ntg-detail-timeline-panel">
+            <SectionLabel>{isCustomerView ? "Milestone timeline" : "Gate event timeline"}</SectionLabel>
+
+            <div className="ntg-timeline">
+              <div className="ntg-timeline-track" />
               {route.map((gate, index) => {
                 const event = eventsByGate[gate.id];
                 const fired = !!event;
                 const isLast = index === route.length - 1;
                 const isCurrent = index === lastEventIndex && index < route.length - 1;
                 const segment = segments.find((item) => item.to === gate.id);
-                const markerColor = fired ? (index === lastEventIndex ? accent : theme.ink) : theme.paper;
+                const state = fired ? (isCurrent ? "current" : "complete") : "pending";
 
                 return (
-                  <div key={`${gate.id}-${index}`} style={{ position: "relative", paddingBottom: isLast ? 0 : 22 }}>
-                    <div style={{
-                      position: "absolute",
-                      left: -28,
-                      top: 2,
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      background: markerColor,
-                      border: `2px solid ${fired ? markerColor : theme.lineStrong}`,
-                      boxShadow: index === lastEventIndex ? `0 0 0 5px ${theme.accentWash}` : "none",
-                    }} />
+                  <div key={`${gate.id}-${index}`} className={`ntg-timeline-entry${isLast ? " is-last" : ""}`} data-state={state}>
+                    <div className="ntg-timeline-marker" />
 
-                    <div style={{
-                      ...panelStyle(theme, {
-                        background: fired ? theme.surface : theme.panelSolid,
-                        radius: 22,
-                        shadow: "none",
-                      }),
-                      padding: "14px 16px",
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
+                    <div className="ntg-panel ntg-timeline-card" data-state={state}>
+                      <div className="ntg-timeline-header">
                         <div>
-                          <div style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 26, lineHeight: 1, letterSpacing: "-0.03em" }}>
+                          <div className="ntg-timeline-title">
                             {gate.name}
-                            {!fired && <span style={{ marginLeft: 8, fontSize: 12, color: theme.inkMuted, fontFamily: "inherit", fontStyle: "italic" }}>expected</span>}
-                            {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, color: accent, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>current</span>}
+                            {!fired && <span className="ntg-timeline-tag ntg-timeline-tag--expected">expected</span>}
+                            {isCurrent && <span className="ntg-timeline-tag ntg-timeline-tag--current">current</span>}
                           </div>
-                          <div style={{ marginTop: 5, ...smallLabel(theme) }}>
+                          <div className="ntg-eyebrow ntg-timeline-meta">
                             {isCustomerView ? gate.type : `Tier ${gate.tier} / ${gate.type}`}
                           </div>
                         </div>
 
-                        <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+                        <div className="ntg-timeline-right ntg-mono">
                           {fired ? (
                             <>
-                              <div style={{ fontWeight: 600 }}>{fmtTime(event.timestamp)}</div>
-                              <div style={{ marginTop: 4, color: theme.inkMuted, fontSize: 10 }}>
+                              <div className="ntg-timeline-primary">{fmtTime(event.timestamp)}</div>
+                              <div className="ntg-timeline-secondary">
                                 {fmtDate(event.timestamp)}{!isCustomerView && ` / conf ${event.confidence.toFixed(2)}`}
                               </div>
                             </>
                           ) : (
-                            <div style={{ color: theme.inkSoft, fontSize: 11 }}>Awaiting event</div>
+                            <div className="ntg-timeline-awaiting">Awaiting event</div>
                           )}
                         </div>
                       </div>
 
                       {segment && index > 0 && (
-                        <div style={{ marginTop: 8, color: theme.inkMuted, fontSize: 10, fontFamily: "'JetBrains Mono', monospace" }}>
+                        <div className="ntg-timeline-leg ntg-mono">
                           leg time {Math.round(segment.duration / 60000)}m
                         </div>
                       )}
@@ -589,89 +382,57 @@ function ShipmentDetail({ shipment, onClose, accent, ink, paper, now, density, m
   );
 }
 
-function Stat({ label, value, sub, accent, theme, mono }) {
+function Stat({ label, value, sub, tone, mono = false }) {
   return (
-    <div style={{
-      ...panelStyle(theme, { background: theme.panel, radius: 24, shadow: "none" }),
-      padding: "16px 18px",
-    }}>
-      <div style={smallLabel(theme)}>{label}</div>
-      <div style={{
-        marginTop: 9,
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        fontSize: 18,
-        fontWeight: 600,
-        fontFamily: mono ? "'JetBrains Mono', monospace" : "inherit",
-        letterSpacing: mono ? 0 : "-0.02em",
-      }}>
-        {accent && <span style={{ width: 8, height: 8, borderRadius: "50%", background: accent, display: "inline-block" }} />}
+    <div className="ntg-panel ntg-detail-stat" data-tone={tone || "default"}>
+      <div className="ntg-eyebrow">{label}</div>
+      <div className={`ntg-detail-stat-value${mono ? " ntg-mono" : ""}`}>
+        {tone && <span className="ntg-detail-stat-dot" />}
         {value}
       </div>
-      {sub && <div style={{ marginTop: 7, fontSize: 11, color: theme.inkMuted, lineHeight: 1.5 }}>{sub}</div>}
+      {sub && <div className="ntg-detail-stat-sub">{sub}</div>}
     </div>
   );
 }
 
-function SectionLabel({ children, theme }) {
-  return <div style={{ ...smallLabel(theme), marginBottom: 12 }}>{children}</div>;
+function SectionLabel({ children }) {
+  return <div className="ntg-eyebrow ntg-section-label">{children}</div>;
 }
 
-function DetailLine({ label, value, theme, accent }) {
+function DetailLine({ label, value, tone = "default" }) {
   return (
-    <div style={{
-      padding: "14px 15px",
-      borderRadius: 20,
-      background: theme.surface,
-      border: `1px solid ${theme.line}`,
-    }}>
-      <div style={smallLabel(theme)}>{label}</div>
-      <div style={{ marginTop: 8, fontSize: 13, color: accent || theme.ink, lineHeight: 1.6 }}>
-        {value}
-      </div>
+    <div className="ntg-detail-line" data-tone={tone}>
+      <div className="ntg-eyebrow">{label}</div>
+      <div className="ntg-detail-line-value">{value}</div>
     </div>
   );
 }
 
-function ExceptionQueue({ shipments, onSelect, ink, paper, accent, density, now, theme, layout }) {
-  const pad = density === "compact" ? 18 : density === "comfy" ? 28 : 22;
+function ExceptionQueue({ shipments, onSelect, density, now }) {
   const flagged = shipments.filter((shipment) => shipment.status === "exception" || shipment.status === "at-risk");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <section style={{
-        ...panelStyle(theme, {
-          background: `linear-gradient(135deg, ${theme.panelSolid} 0%, ${theme.surfaceAlt} 100%)`,
-          radius: 32,
-          shadow: theme.shadow,
-        }),
-        padding: layout.isNarrow ? 22 : 28,
-      }}>
-        <div style={smallLabel(theme)}>Operational watchlist</div>
-        <h2 style={{ ...titleStyle(layout.isNarrow ? 40 : 48), marginTop: 14 }}>Exceptions</h2>
-        <p style={{ ...bodyCopy(theme), margin: "14px 0 0", maxWidth: 620 }}>
+    <div className="ntg-exceptions-view" data-density={density}>
+      <section className="ntg-panel ntg-ops-hero">
+        <div className="ntg-eyebrow">Operational watchlist</div>
+        <h2 className="ntg-heading-section ntg-ops-hero-heading">Exceptions</h2>
+        <p className="ntg-copy ntg-ops-hero-copy">
           Shipments missing expected milestone confirmations or carrying operational flags that deserve human attention.
         </p>
       </section>
 
       {flagged.length === 0 && (
-        <div style={{
-          ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-          padding: 68,
-          textAlign: "center",
-        }}>
-          <div style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 28, lineHeight: 1 }}>All clear.</div>
-          <div style={{ marginTop: 10, color: theme.inkMuted, fontSize: 13 }}>
+        <div className="ntg-panel ntg-exception-empty">
+          <div className="ntg-exception-empty-title">All clear.</div>
+          <div className="ntg-exception-empty-copy">
             No active exceptions on the visible corridors.
           </div>
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 14 }}>
+      <div className="ntg-exception-list">
         {flagged.map((shipment) => {
           const severity = shipment.status === "exception" ? "Severity 1" : "Severity 2";
-          const severityColor = statusDot(shipment.status, accent);
           const lastEvent = shipment.events[shipment.events.length - 1];
           const lastGate = lastEvent ? shipmentData.GATE_BY_ID[lastEvent.gate] : null;
 
@@ -679,35 +440,26 @@ function ExceptionQueue({ shipments, onSelect, ink, paper, accent, density, now,
             <button
               key={shipment.id}
               onClick={() => onSelect(shipment)}
-              className="ntg-interactive-card"
-              style={{
-                ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-                padding: "18px 20px",
-                cursor: "pointer",
-                textAlign: "left",
-                display: "grid",
-                gridTemplateColumns: layout.isNarrow ? "1fr" : "6px minmax(0, 1fr) auto",
-                gap: layout.isNarrow ? 14 : 18,
-                alignItems: "center",
-              }}
+              className="ntg-panel ntg-interactive-card ntg-exception-card"
+              data-status={shipment.status}
             >
-              {!layout.isNarrow && <div style={{ alignSelf: "stretch", borderRadius: 999, background: severityColor }} />}
+              <div className="ntg-exception-rail" />
               <div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ ...smallLabel(theme), color: severityColor }}>{severity}</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: theme.inkSoft }}>{shipment.id}</span>
+                <div className="ntg-exception-header">
+                  <span className="ntg-eyebrow ntg-exception-severity">{severity}</span>
+                  <span className="ntg-mono ntg-exception-id">{shipment.id}</span>
                 </div>
-                <div style={{ marginTop: 10, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 28, lineHeight: 1.08, letterSpacing: "-0.03em" }}>
+                <div className="ntg-exception-title">
                   {shipment.flags ? shipment.flags[0] : "Status flagged"}
                 </div>
-                <div style={{ marginTop: 10, fontSize: 12.5, color: theme.inkMuted, lineHeight: 1.65 }}>
+                <div className="ntg-exception-copy">
                   {shipment.customer} / {shipment.origin} -> {shipment.destination}
                   {lastGate && <> / last seen {lastGate.name} at {fmtTime(lastEvent.timestamp)}</>}
                 </div>
               </div>
-              <div style={{ textAlign: layout.isNarrow ? "left" : "right", fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+              <div className="ntg-exception-meta ntg-mono">
                 <div>ETA {fmtTime(shipment.eta)}</div>
-                <div style={{ marginTop: 5, color: theme.inkMuted }}>{fmtDelta(shipment.eta, now)}</div>
+                <div className="ntg-exception-meta-sub">{fmtDelta(shipment.eta, now)}</div>
               </div>
             </button>
           );
@@ -717,8 +469,7 @@ function ExceptionQueue({ shipments, onSelect, ink, paper, accent, density, now,
   );
 }
 
-function Analytics({ shipments, ink, paper, accent, density, theme, layout }) {
-  const pad = density === "compact" ? 18 : density === "comfy" ? 28 : 22;
+function Analytics({ shipments, density }) {
   const total24h = Object.values(shipmentData.GATE_VOLUME_24H).reduce((sum, value) => sum + value, 0);
   const inTransit = shipments.filter((shipment) => shipment.status === "in-transit").length;
   const onTime = shipments.filter((shipment) => shipment.status === "in-transit" || shipment.status === "delivered").length;
@@ -742,99 +493,56 @@ function Analytics({ shipments, ink, paper, accent, density, theme, layout }) {
   const maxVolume = Math.max(...gateVolumes.map((gate) => gate.vol));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <section style={{
-        ...panelStyle(theme, {
-          background: `linear-gradient(135deg, ${theme.panelSolid} 0%, ${theme.surfaceAlt} 100%)`,
-          radius: 32,
-          shadow: theme.shadow,
-        }),
-        padding: layout.isNarrow ? 22 : 28,
-      }}>
-        <div style={smallLabel(theme)}>Pilot intelligence</div>
-        <h2 style={{ ...titleStyle(layout.isNarrow ? 40 : 48), marginTop: 14 }}>Network performance</h2>
-        <p style={{ ...bodyCopy(theme), margin: "14px 0 0", maxWidth: 620 }}>
+    <div className="ntg-analytics-view" data-density={density}>
+      <section className="ntg-panel ntg-ops-hero">
+        <div className="ntg-eyebrow">Pilot intelligence</div>
+        <h2 className="ntg-heading-section ntg-ops-hero-heading">Network performance</h2>
+        <p className="ntg-copy ntg-ops-hero-copy">
           A cleaner analytical layer over the synthetic pilot data, tuned for leadership readouts and operational reviews.
         </p>
       </section>
 
-      <section style={{
-        display: "grid",
-        gridTemplateColumns: layout.isNarrow ? "1fr" : layout.isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-        gap: 14,
-      }}>
-        <KPI label="Gate events" value={total24h.toLocaleString()} sub="Across all visible gates" theme={theme} />
-        <KPI label="In transit now" value={inTransit} sub={`${shipments.length} total tracked`} theme={theme} accent={theme.info} />
-        <KPI label="Exceptions" value={exceptions} sub="Requires operator review" theme={theme} accent={theme.warning} />
-        <KPI label="Avg confidence" value={avgConfidence.toFixed(3)} sub={`${Math.round((onTime / Math.max(shipments.length, 1)) * 100)}% on-time posture`} theme={theme} mono />
+      <section className="ntg-analytics-kpi-grid">
+        <KPI label="Gate events" value={total24h.toLocaleString()} sub="Across all visible gates" />
+        <KPI label="In transit now" value={inTransit} sub={`${shipments.length} total tracked`} tone="info" />
+        <KPI label="Exceptions" value={exceptions} sub="Requires operator review" tone="warning" />
+        <KPI label="Avg confidence" value={avgConfidence.toFixed(3)} sub={`${Math.round((onTime / Math.max(shipments.length, 1)) * 100)}% on-time posture`} mono />
       </section>
 
-      <section style={{
-        display: "grid",
-        gridTemplateColumns: layout.isTablet ? "1fr" : "minmax(0, 1.1fr) minmax(0, 0.9fr)",
-        gap: 18,
-      }}>
-        <div style={{
-          ...panelStyle(theme, { background: theme.panel, radius: 30 }),
-          padding: 0,
-          overflow: "hidden",
-        }}>
-          <div style={{ padding: `${pad}px ${pad}px 0` }}>
-            <SectionLabel theme={theme}>Corridors / 24h</SectionLabel>
-            <div style={{ marginBottom: 14, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 30, lineHeight: 1, letterSpacing: "-0.03em" }}>
-              Corridor reliability
-            </div>
+      <section className="ntg-analytics-panel-grid">
+        <div className="ntg-panel ntg-corridor-panel">
+          <div className="ntg-corridor-panel-header">
+            <SectionLabel>Corridors / 24h</SectionLabel>
+            <div className="ntg-corridor-panel-title">Corridor reliability</div>
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 620 }}>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 100px 100px 1fr",
-                gap: 16,
-                padding: `14px ${pad}px`,
-                borderTop: `1px solid ${theme.line}`,
-                borderBottom: `1px solid ${theme.line}`,
-                background: theme.surface,
-                ...smallLabel(theme),
-              }}>
+          <div className="ntg-scroll ntg-corridor-table-scroll">
+            <div className="ntg-corridor-table">
+              <div className="ntg-corridor-table-head">
                 <div>Corridor</div>
-                <div style={{ textAlign: "right" }}>Events</div>
-                <div style={{ textAlign: "right" }}>ETA delta</div>
+                <div className="ntg-corridor-align-right">Events</div>
+                <div className="ntg-corridor-align-right">ETA delta</div>
                 <div>Reliability</div>
               </div>
+
               {corridorPerformance.map((corridor, index) => (
                 <div
                   key={corridor.name}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 100px 100px 1fr",
-                    gap: 16,
-                    padding: `14px ${pad}px`,
-                    alignItems: "center",
-                    borderBottom: index < corridorPerformance.length - 1 ? `1px solid ${theme.line}` : 0,
-                  }}
+                  className={`ntg-corridor-row${index === corridorPerformance.length - 1 ? " is-last" : ""}`}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{corridor.name}</div>
-                  <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{corridor.events}</div>
-                  <div style={{
-                    textAlign: "right",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 12,
-                    color: corridor.avgEta.startsWith("-") ? theme.success : theme.ink,
-                  }}>
+                  <div className="ntg-corridor-name">{corridor.name}</div>
+                  <div className="ntg-corridor-value ntg-corridor-align-right ntg-mono">{corridor.events}</div>
+                  <div className="ntg-corridor-value ntg-corridor-align-right ntg-mono" data-trend={deltaTrend(corridor.avgEta)}>
                     {corridor.avgEta}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ flex: 1, height: 6, borderRadius: 999, background: theme.surface }}>
-                      <div style={{
-                        width: `${corridor.reliability * 100}%`,
-                        height: "100%",
-                        borderRadius: 999,
-                        background: corridor.reliability > 0.95 ? theme.success : corridor.reliability > 0.93 ? theme.accent : theme.warning,
-                      }} />
-                    </div>
-                    <div style={{ width: 50, textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+                  <div className="ntg-corridor-reliability">
+                    <progress
+                      className="ntg-progress"
+                      value={corridor.reliability}
+                      max="1"
+                      data-tone={reliabilityTone(corridor.reliability)}
+                    />
+                    <div className="ntg-corridor-percent ntg-mono">
                       {(corridor.reliability * 100).toFixed(1)}%
                     </div>
                   </div>
@@ -844,47 +552,27 @@ function Analytics({ shipments, ink, paper, accent, density, theme, layout }) {
           </div>
         </div>
 
-        <div style={{
-          ...panelStyle(theme, { background: theme.panel, radius: 30 }),
-          padding: pad,
-        }}>
-          <SectionLabel theme={theme}>Gate event volume / 24h</SectionLabel>
-          <div style={{ marginBottom: 14, fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 30, lineHeight: 1, letterSpacing: "-0.03em" }}>
-            Gate intensity
-          </div>
-          <div style={{ display: "grid", gap: 10 }}>
+        <div className="ntg-panel ntg-gate-volume-panel">
+          <SectionLabel>Gate event volume / 24h</SectionLabel>
+          <div className="ntg-gate-volume-title">Gate intensity</div>
+
+          <div className="ntg-gate-volume-list">
             {gateVolumes.map((gate) => (
-              <div key={gate.id} style={{
-                padding: "12px 14px",
-                borderRadius: 22,
-                background: theme.surface,
-                border: `1px solid ${theme.line}`,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{
-                      padding: "3px 7px",
-                      borderRadius: 999,
-                      background: gate.tier === 1 ? theme.accentWash : theme.panelSolid,
-                      color: gate.tier === 1 ? theme.accent : theme.inkMuted,
-                      fontSize: 10,
-                      fontFamily: "'JetBrains Mono', monospace",
-                    }}>
-                      T{gate.tier}
-                    </span>
-                    <span style={{ fontSize: 12.5 }}>{gate.name}</span>
+              <div key={gate.id} className="ntg-gate-volume-card">
+                <div className="ntg-gate-volume-top">
+                  <div className="ntg-gate-volume-meta">
+                    <span className="ntg-tier-badge ntg-mono" data-tier={gate.tier}>T{gate.tier}</span>
+                    <span className="ntg-gate-volume-name">{gate.name}</span>
                   </div>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{gate.vol}</span>
+                  <span className="ntg-mono ntg-gate-volume-count">{gate.vol}</span>
                 </div>
-                <div style={{ marginTop: 10, height: 7, borderRadius: 999, background: theme.panelSolid }}>
-                  <div style={{
-                    width: `${(gate.vol / maxVolume) * 100}%`,
-                    height: "100%",
-                    borderRadius: 999,
-                    background: gate.tier === 1 ? theme.accent : theme.info,
-                    opacity: gate.tier === 1 ? 1 : 0.75,
-                  }} />
-                </div>
+
+                <progress
+                  className="ntg-progress ntg-progress--gate"
+                  value={maxVolume ? gate.vol / maxVolume : 0}
+                  max="1"
+                  data-tone={gate.tier === 1 ? "accent" : "info"}
+                />
               </div>
             ))}
           </div>
@@ -894,46 +582,23 @@ function Analytics({ shipments, ink, paper, accent, density, theme, layout }) {
   );
 }
 
-function KPI({ label, value, sub, theme, accent, mono }) {
+function KPI({ label, value, sub, tone = "default", mono = false }) {
   return (
-    <div style={{
-      ...panelStyle(theme, { background: theme.panel, radius: 28 }),
-      padding: "20px 20px 22px",
-    }}>
-      <div style={smallLabel(theme)}>{label}</div>
-      <div style={{
-        marginTop: 10,
-        fontFamily: mono ? "'JetBrains Mono', monospace" : "'Instrument Serif', Georgia, serif",
-        fontSize: mono ? 30 : 44,
-        lineHeight: 0.95,
-        letterSpacing: mono ? 0 : "-0.04em",
-        color: accent || theme.ink,
-      }}>
+    <div className="ntg-panel ntg-analytics-kpi" data-tone={tone}>
+      <div className="ntg-eyebrow">{label}</div>
+      <div className={`ntg-analytics-kpi-value${mono ? " ntg-mono ntg-analytics-kpi-value--mono" : ""}`}>
         {value}
       </div>
-      {sub && <div style={{ marginTop: 10, color: theme.inkMuted, fontSize: 11, lineHeight: 1.55 }}>{sub}</div>}
+      {sub && <div className="ntg-analytics-kpi-sub">{sub}</div>}
     </div>
   );
 }
 
-function InsightCard({ label, value, theme, accent }) {
+function InsightCard({ label, value, tone = "default" }) {
   return (
-    <div style={{
-      padding: "14px 15px",
-      borderRadius: 22,
-      background: "rgba(255,255,255,0.04)",
-      border: `1px solid ${theme.line}`,
-    }}>
-      <div style={smallLabel(theme)}>{label}</div>
-      <div style={{
-        marginTop: 8,
-        fontFamily: "'Instrument Serif', Georgia, serif",
-        fontSize: 34,
-        lineHeight: 0.95,
-        color: accent || theme.ink,
-      }}>
-        {value}
-      </div>
+    <div className="ntg-insight-card" data-tone={tone}>
+      <div className="ntg-eyebrow">{label}</div>
+      <div className="ntg-insight-card-value">{value}</div>
     </div>
   );
 }

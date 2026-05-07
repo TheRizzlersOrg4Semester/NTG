@@ -173,6 +173,10 @@ function corridorPoints(gateIds) {
     .join(" ");
 }
 
+function mapHeightClass(height) {
+  return `ntg-map-height-${Math.round(height)}`;
+}
+
 // Pre-project gate positions from their lon/lat
 (function bindGatePositions() {
   if (!shipmentData.GATES) return;
@@ -207,7 +211,7 @@ function DenmarkMap({
   const landStroke = inkColor;
 
   return (
-    <svg viewBox="0 0 1000 720" style={{ width: "100%", height, display: "block" }}>
+    <svg viewBox="0 0 1000 720" className={`ntg-denmark-map ${mapHeightClass(height)}`}>
       <defs>
         <pattern id="dmGrid" width="40" height="40" patternUnits="userSpaceOnUse">
           <path d="M 40 0 L 0 0 0 40" fill="none" stroke={inkColor} strokeWidth="0.4" opacity="0.06" />
@@ -363,9 +367,11 @@ function DenmarkMap({
                 strokeLinejoin="round"
               />
               {last && (
-                <g transform={`translate(${last._x} ${last._y})`}
-                   onClick={() => onShipmentClick && onShipmentClick(s)}
-                   style={{ cursor: "pointer" }}>
+                <g
+                  transform={`translate(${last._x} ${last._y})`}
+                  onClick={() => onShipmentClick && onShipmentClick(s)}
+                  className="ntg-map-clickable"
+                >
                   {/* One-shot arrival ping — re-keys whenever event count changes */}
                   <circle key={`ping-a-${s.events.length}`}
                           r="6" fill="none"
@@ -407,9 +413,12 @@ function DenmarkMap({
           const r = g.tier === 1 ? 7 : g.tier === 2 ? 5.5 : g.tier === 3 ? 4.5 : 3.5;
           const labelOffsetY = g.tier === 1 ? -14 : -10;
           return (
-            <g key={g.id} transform={`translate(${g._x} ${g._y})`}
-               onClick={() => onGateClick && onGateClick(g)}
-               style={{ cursor: onGateClick ? "pointer" : "default" }}>
+            <g
+              key={g.id}
+              transform={`translate(${g._x} ${g._y})`}
+              onClick={() => onGateClick && onGateClick(g)}
+              className={onGateClick ? "ntg-map-clickable" : ""}
+            >
               {g.tier === 1 && (
                 <circle r={r + 5} fill="none" stroke={accentColor} strokeWidth="1" opacity="0.5" />
               )}

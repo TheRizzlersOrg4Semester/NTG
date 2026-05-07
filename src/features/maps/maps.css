@@ -1,0 +1,227 @@
+.ntg-map-shell {
+  position: relative;
+  width: 100%;
+  background: #eef0ec;
+  color: var(--ntg-ink);
+}
+
+.ntg-map-shell[data-dark="true"] {
+  background: #171a21;
+  color: #f5f7fa;
+}
+
+.ntg-map-shell--leaflet[data-dark="true"] {
+  background: #1a1c20;
+}
+
+.ntg-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.ntg-map-height-300 { height: 300px; }
+.ntg-map-height-360 { height: 360px; }
+.ntg-map-height-420 { height: 420px; }
+.ntg-map-height-540 { height: 540px; }
+.ntg-map-height-560 { height: 560px; }
+
+.ntg-map-loading,
+.ntg-map-chip,
+.ntg-map-status-pill,
+.ntg-map-footnote,
+.ntg-map-attribution,
+.ntg-europe-overlay-card {
+  position: absolute;
+  z-index: 500;
+}
+
+.ntg-map-loading {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: inherit;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.68;
+  z-index: 450;
+}
+
+.ntg-map-chip,
+.ntg-map-status-pill,
+.ntg-map-footnote,
+.ntg-europe-overlay-card {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+}
+
+.ntg-map-shell[data-dark="true"] .ntg-map-chip,
+.ntg-map-shell[data-dark="true"] .ntg-map-status-pill,
+.ntg-map-shell[data-dark="true"] .ntg-map-footnote,
+.ntg-map-shell[data-dark="true"] .ntg-europe-overlay-card {
+  background: rgba(12, 15, 20, 0.74);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 36px rgba(3, 6, 11, 0.28);
+}
+
+.ntg-map-chip {
+  top: 16px;
+  left: 16px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ntg-map-attribution {
+  left: 8px;
+  bottom: 8px;
+  z-index: 500;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  opacity: 0.55;
+}
+
+.ntg-europe-overlay-stack {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 500;
+  display: grid;
+  gap: 10px;
+  width: min(320px, calc(100% - 32px));
+}
+
+.ntg-europe-overlay-card {
+  position: static;
+  padding: 12px 14px;
+  border-radius: 18px;
+}
+
+.ntg-europe-overlay-title {
+  margin-top: 8px;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 28px;
+  line-height: 0.96;
+}
+
+.ntg-europe-overlay-copy {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ntg-ink-muted);
+}
+
+.ntg-map-shell[data-dark="true"] .ntg-europe-overlay-copy {
+  color: rgba(245, 247, 250, 0.72);
+}
+
+.ntg-europe-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.ntg-europe-overlay-card--legend {
+  display: grid;
+  gap: 8px;
+}
+
+.ntg-europe-legend-swatch {
+  width: 34px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--ntg-accent);
+  flex-shrink: 0;
+}
+
+.ntg-europe-legend-swatch[data-type="secondary"] {
+  background: color-mix(in srgb, var(--ntg-accent) 72%, #d4a624 28%);
+}
+
+.ntg-europe-legend-swatch[data-type="ferry"] {
+  border: 1px solid var(--ntg-ink-soft);
+  background: repeating-linear-gradient(90deg, var(--ntg-ink-soft) 0 8px, transparent 8px 14px);
+}
+
+.ntg-map-status-pill {
+  right: 16px;
+  top: 16px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  max-width: 260px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ntg-map-footnote {
+  left: 16px;
+  bottom: 12px;
+  padding: 9px 11px;
+  border-radius: 14px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ntg-denmark-map {
+  width: 100%;
+  display: block;
+}
+
+.ntg-map-clickable {
+  cursor: pointer;
+}
+
+.ntg-tip-card {
+  display: grid;
+  gap: 2px;
+}
+
+.ntg-tip-title,
+.ntg-tip-subtitle {
+  font-family: "JetBrains Mono", monospace;
+}
+
+.ntg-tip-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ntg-tip-copy {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.ntg-tip-subtitle {
+  margin-top: 2px;
+  font-size: 9px;
+  opacity: 0.68;
+}
+
+@media (max-width: 699px) {
+  .ntg-map-status-pill {
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    max-width: none;
+  }
+
+  .ntg-map-footnote {
+    display: none;
+  }
+}
