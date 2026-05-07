@@ -1,6 +1,10 @@
 // data.jsx — synthetic shipment + gate dataset for NTG Smart Checkpoints
 
 // Gates: { id, name, tier (1-4), x, y } — coordinates in our 1000x720 Denmark viewBox
+const NTG = window.NTG = window.NTG || {};
+NTG.domain = NTG.domain || {};
+NTG.domain.shipments = NTG.domain.shipments || {};
+
 const GATES = [
   // Tier 1 — National chokepoints
   { id: "PAD", name: "Padborg",          tier: 1, type: "Border",   x: 360, y: 600, lon: 9.36, lat: 54.83 },
@@ -311,4 +315,11 @@ const GATE_VOLUME_24H = {
   ESJ: 36, RKB: 22, HRS: 18,
 };
 
-Object.assign(window, { GATES, GATE_BY_ID, CORRIDORS, SHIPMENTS, GATE_VOLUME_24H, NOW_REF });
+NTG.domain.shipments.data = {
+  GATES,
+  GATE_BY_ID,
+  CORRIDORS,
+  SHIPMENTS,
+  GATE_VOLUME_24H,
+  NOW_REF,
+};

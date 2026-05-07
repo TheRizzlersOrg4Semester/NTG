@@ -133,6 +133,18 @@ const __TWEAKS_STYLE = `
   .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
 `;
 
+const __TWEAKS_STYLE_ID = "ntg-tweaks-style";
+
+function ensureTweaksStyles() {
+  if (document.getElementById(__TWEAKS_STYLE_ID)) return;
+  const styleTag = document.createElement("style");
+  styleTag.id = __TWEAKS_STYLE_ID;
+  styleTag.textContent = __TWEAKS_STYLE;
+  document.head.appendChild(styleTag);
+}
+
+ensureTweaksStyles();
+
 // ── useTweaks ───────────────────────────────────────────────────────────────
 // Single source of truth for tweak values. setTweak persists via the host
 // (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
@@ -229,8 +241,6 @@ function TweaksPanel({ title = 'Tweaks', children }) {
 
   if (!open) return null;
   return (
-    <>
-      <style>{__TWEAKS_STYLE}</style>
       <div ref={dragRef} className="twk-panel"
            style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
         <div className="twk-hd" onMouseDown={onDragStart}>
@@ -241,7 +251,6 @@ function TweaksPanel({ title = 'Tweaks', children }) {
         </div>
         <div className="twk-body">{children}</div>
       </div>
-    </>
   );
 }
 
@@ -418,8 +427,19 @@ function TweakButton({ label, onClick, secondary = false }) {
   );
 }
 
-Object.assign(window, {
-  useTweaks, TweaksPanel, TweakSection, TweakRow,
-  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
-  TweakText, TweakNumber, TweakColor, TweakButton,
+const NTG = window.NTG = window.NTG || {};
+NTG.shared = NTG.shared || {};
+NTG.shared.ui = Object.assign(NTG.shared.ui || {}, {
+  useTweaks,
+  TweaksPanel,
+  TweakSection,
+  TweakRow,
+  TweakSlider,
+  TweakToggle,
+  TweakRadio,
+  TweakSelect,
+  TweakText,
+  TweakNumber,
+  TweakColor,
+  TweakButton,
 });

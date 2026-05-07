@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NTG Logistics Route Map</title>
+  <link rel="stylesheet" href="leaflet.css" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="map">
+    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666; font-family: Arial, sans-serif;">
+      Loading map...
+    </div>
+  </div>
+  <aside class="legend">
+    <h2>Route legend</h2>
+    <div class="legend-row"><span class="legend-badge primary"></span><span>Red = Primary routes</span></div>
+    <div class="legend-row"><span class="legend-badge secondary"></span><span>Yellow = Secondary routes</span></div>
+    <div class="legend-row"><span class="legend-badge ferry"></span><span>Dashed = Ferry routes</span></div>
+  </aside>
+  <script src="leaflet.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

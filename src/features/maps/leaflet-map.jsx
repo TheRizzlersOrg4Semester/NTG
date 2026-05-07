@@ -1,6 +1,12 @@
 // leaflet-map.jsx — real OSM-tiled map of Denmark for the geographic variant.
 // Loaded dynamically via CDN to avoid bundling.
 
+const NTG = window.NTG = window.NTG || {};
+NTG.features = NTG.features || {};
+NTG.features.maps = NTG.features.maps || {};
+
+const shipmentData = NTG.domain.shipments.data;
+
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS  = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
@@ -21,6 +27,12 @@ function loadLeaflet() {
   });
   return leafletPromise;
 }
+
+NTG.features.maps.leafletRuntime = {
+  loadLeaflet,
+  cssUrl: LEAFLET_CSS,
+  jsUrl: LEAFLET_JS,
+};
 
 // Hand-tuned freight-road geometry. Leaflet uses real map tiles underneath; these
 // points keep the prototype routes on recognizable Danish road corridors instead
@@ -54,8 +66,8 @@ function segmentLatLngs(fromId, toId) {
   if (direct) return direct;
   const reverse = ROAD_SEGMENTS[`${toId}>${fromId}`];
   if (reverse) return [...reverse].reverse();
-  const a = window.GATE_BY_ID[fromId];
-  const b = window.GATE_BY_ID[toId];
+  const a = shipmentData.GATE_BY_ID[fromId];
+  const b = shipmentData.GATE_BY_ID[toId];
   return a && b ? [[a.lat, a.lon], [b.lat, b.lon]] : [];
 }
 
@@ -63,7 +75,7 @@ function routeLatLngs(gateIds) {
   const points = [];
   gateIds.forEach((id, i) => {
     if (i === 0) {
-      const g = window.GATE_BY_ID[id];
+      const g = shipmentData.GATE_BY_ID[id];
       if (g) points.push([g.lat, g.lon]);
       return;
     }
@@ -77,8 +89,8 @@ function routeLatLngs(gateIds) {
 }
 
 function LeafletDenmark({
-  gates = window.GATES,
-  corridors = window.CORRIDORS,
+  gates = shipmentData.GATES,
+  corridors = shipmentData.CORRIDORS,
   shipments = [],
   selectedShipmentId = null,
   visibleTiers = { 1: true, 2: true, 3: true, 4: true },
@@ -228,7 +240,7 @@ function LeafletDenmark({
     shipments.forEach(s => {
       if (s.status === "scheduled" || s.events.length < 1) return;
       const isSelected = s.id === selectedShipmentId;
-      const last = window.GATE_BY_ID[s.events[s.events.length - 1].gate];
+      const last = shipmentData.GATE_BY_ID[s.events[s.events.length - 1].gate];
       if (!last) return;
       // Slight offset so dot doesn't sit exactly on gate
       const latlng = [last.lat + 0.02, last.lon + 0.02];
@@ -284,25 +296,4 @@ function LeafletDenmark({
   );
 }
 
-// Inject leaflet override styles for our typography
-(function injectStyles() {
-  if (document.getElementById("ntg-leaflet-style")) return;
-  const s = document.createElement("style");
-  s.id = "ntg-leaflet-style";
-  s.textContent = `
-    .leaflet-container { background: transparent !important; font-family: 'Geist', sans-serif !important; }
-    .leaflet-tooltip.ntg-tip {
-      background: #1a1814; color: #f6f3ec; border: 0; border-radius: 0;
-      padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-      font-family: 'Geist', sans-serif;
-    }
-    .leaflet-tooltip.ntg-tip::before { border-top-color: #1a1814 !important; }
-    .leaflet-control-zoom a {
-      background: rgba(246,243,236,0.92) !important; color: #1a1814 !important;
-      border: 0 !important; font-family: 'Geist', sans-serif !important;
-    }
-  `;
-  document.head.appendChild(s);
-})();
-
-Object.assign(window, { LeafletDenmark });
+NTG.features.maps.LeafletDenmark = LeafletDenmark;

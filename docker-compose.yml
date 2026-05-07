@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DB_PATH: /app/storage/ntg-smart-checkpoints.sqlite
+    volumes:
+      - sqlite_data:/app/storage
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:

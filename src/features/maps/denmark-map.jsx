@@ -7,6 +7,12 @@
 // Bornholm out in the Baltic.
 
 // Geographic projection: maps lon/lat → SVG x/y
+const NTG = window.NTG = window.NTG || {};
+NTG.features = NTG.features || {};
+NTG.features.maps = NTG.features.maps || {};
+
+const shipmentData = NTG.domain.shipments.data;
+
 const PROJ = {
   lon0: 7.6, lon1: 15.6,   // west, east
   lat0: 54.3, lat1: 58.05,  // south, north
@@ -160,7 +166,7 @@ const MOTORWAYS = [
 function corridorPoints(gateIds) {
   return gateIds
     .map(id => {
-      const g = window.GATE_BY_ID[id];
+      const g = shipmentData.GATE_BY_ID[id];
       return g ? `${g._x},${g._y}` : null;
     })
     .filter(Boolean)
@@ -169,8 +175,8 @@ function corridorPoints(gateIds) {
 
 // Pre-project gate positions from their lon/lat
 (function bindGatePositions() {
-  if (!window.GATES) return;
-  window.GATES.forEach(g => {
+  if (!shipmentData.GATES) return;
+  shipmentData.GATES.forEach(g => {
     if (g.lon != null && g.lat != null) {
       const [x, y] = proj(g.lon, g.lat);
       g._x = x; g._y = y;
@@ -181,8 +187,8 @@ function corridorPoints(gateIds) {
 })();
 
 function DenmarkMap({
-  gates = window.GATES,
-  corridors = window.CORRIDORS,
+  gates = shipmentData.GATES,
+  corridors = shipmentData.CORRIDORS,
   shipments = [],
   selectedShipmentId = null,
   visibleTiers = { 1: true, 2: true, 3: true, 4: true },
@@ -344,7 +350,7 @@ function DenmarkMap({
           const passedIds = s.events.map(e => e.gate);
           const points = corridorPoints(passedIds);
           const isSelected = s.id === selectedShipmentId;
-          const last = window.GATE_BY_ID[s.events[s.events.length - 1].gate];
+          const last = shipmentData.GATE_BY_ID[s.events[s.events.length - 1].gate];
           return (
             <g key={s.id} opacity={selectedShipmentId && !isSelected ? 0.18 : 1}>
               <polyline
@@ -438,4 +444,4 @@ function DenmarkMap({
   );
 }
 
-Object.assign(window, { DenmarkMap });
+NTG.features.maps.DenmarkMap = DenmarkMap;
