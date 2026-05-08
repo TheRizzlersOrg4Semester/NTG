@@ -787,6 +787,33 @@
   color: var(--ntg-ink-muted);
 }
 
+.ntg-equipment-detail {
+  --ntg-panel-radius: 8px;
+  --ntg-panel-shadow: none;
+  margin-top: 16px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 16px;
+}
+
+.ntg-equipment-detail-title {
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.ntg-equipment-detail-copy {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ntg-ink-muted);
+}
+
+.ntg-equipment-detail-grid {
+  display: grid;
+  gap: 8px;
+}
+
 .ntg-exception-empty {
   --ntg-panel-radius: 28px;
   padding: 68px;
@@ -1050,7 +1077,8 @@
   }
 
   .ntg-analytics-panel-grid,
-  .ntg-detail-panels {
+  .ntg-detail-panels,
+  .ntg-equipment-detail {
     grid-template-columns: 1fr;
   }
 }

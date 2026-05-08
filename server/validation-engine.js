@@ -85,7 +85,7 @@ function buildReason(status, failedChecks, reviewChecks, confidence) {
   if (reviewChecks.some((check) => check.check === "equipment_match")) return "Equipment or trailer identifier does not match the active assignment.";
   if (reviewChecks.some((check) => check.check === "plate_match")) return "Tractor plate hash does not match the active assignment.";
   if (status === "needs_review") return `Confidence ${Math.round(confidence * 100)}% is below confirmed threshold.`;
-  return "Event accepted as a verified freight milestone.";
+  return "Gate matches expected route and equipment.";
 }
 
 function validateGateEvent(payload, rawEvent) {

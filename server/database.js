@@ -29,13 +29,20 @@ function ensureSchema(database) {
 function ensureSeed(database) {
   const seedPayload = loadBootstrapPayload();
   const existing = database
-    .prepare("SELECT state_key FROM app_state WHERE state_key = ?")
+    .prepare("SELECT state_key, payload FROM app_state WHERE state_key = ?")
     .get(STATE_KEY);
 
   if (!existing) {
     database
       .prepare("INSERT INTO app_state (state_key, payload) VALUES (?, ?)")
       .run(STATE_KEY, JSON.stringify(seedPayload));
+    return;
+  }
+
+  const existingPayload = JSON.parse(existing.payload);
+  const hasPulseCase = existingPayload.SHIPMENTS?.some((shipment) => shipment.id === "SHP-2026-00421");
+  if (!hasPulseCase) {
+    saveBootstrapState(database, seedPayload);
   }
 }
 

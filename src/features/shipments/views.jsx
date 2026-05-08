@@ -36,6 +36,29 @@ function eventGateId(event) {
   return event.gate_id || event.gate;
 }
 
+function gateOwner(gate) {
+  return gate?.gate_owner || "NTG partner gate";
+}
+
+function gateType(gate) {
+  return gate?.gate_type || gate?.type || "Checkpoint";
+}
+
+function eventSource(event) {
+  return event.source === "SIMULATED_GATE" ? "Simulated partner event" : (event.source || "Partner event");
+}
+
+function activeAssignmentFor(shipment, now) {
+  const assignments = shipment?.equipment_assignments || [];
+  if (!assignments.length) return null;
+
+  return assignments.find((assignment) => {
+    const from = assignment.valid_from ? new Date(assignment.valid_from).getTime() : -Infinity;
+    const to = assignment.valid_to ? new Date(assignment.valid_to).getTime() : Infinity;
+    return now >= from && now <= to;
+  }) || assignments[assignments.length - 1];
+}
+
 function ShipmentList({ shipments, onSelect, selectedId, density, now }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
@@ -222,6 +245,7 @@ function ShipmentDetail({
   const lastGate = lastEvent ? shipmentData.GATE_BY_ID[eventGateId(lastEvent)] : null;
   const nextGate = shipment.route[shipment.events.length] ? shipmentData.GATE_BY_ID[shipment.route[shipment.events.length]] : null;
   const shipmentTone = statusTone(shipment.status);
+  const activeAssignment = activeAssignmentFor(shipment, now);
 
   const segments = [];
   for (let index = 0; index < shipment.events.length - 1; index += 1) {
@@ -264,6 +288,25 @@ function ShipmentDetail({
             )}
             <Stat label="Weight" value={`${(shipment.weightKg / 1000).toFixed(1)} t`} sub={`${shipment.events.length} of ${shipment.route.length} milestones confirmed`} mono />
           </div>
+
+          {(shipment.trailer_id || shipment.equipment_id || shipment.equipment_assignments) && (
+            <div className="ntg-panel ntg-equipment-detail">
+              <div>
+                <SectionLabel>Equipment continuity</SectionLabel>
+                <div className="ntg-equipment-detail-title">
+                  Trailer / load unit {shipment.trailer_id || shipment.equipment_id}
+                </div>
+                <div className="ntg-equipment-detail-copy">
+                  Tracking remains tied to the trailer/load unit, even when tractor assignments change during a handover.
+                </div>
+              </div>
+              <div className="ntg-equipment-detail-grid">
+                <DetailLine label="Current tractor hash" value={activeAssignment?.tractor_plate_hash || shipment.tractor_plate_hash || "Not available"} />
+                <DetailLine label="Carrier" value={activeAssignment?.carrier_id || shipment.carrier || "Not available"} />
+                <DetailLine label="Handover status" value={(shipment.equipment_assignments || []).length > 1 ? "Carrier handover supported" : "Single assignment"} tone="info" />
+              </div>
+            </div>
+          )}
 
           {shipment.flags && shipment.flags.length > 0 && (
             <div className="ntg-panel ntg-detail-flag" data-status={shipment.status}>
@@ -358,7 +401,7 @@ function ShipmentDetail({
                             )}
                           </div>
                           <div className="ntg-eyebrow ntg-timeline-meta">
-                            {isCustomerView ? gate.type : `Tier ${gate.tier} / ${gate.type}`}
+                            {isCustomerView ? gateType(gate) : `${gateOwner(gate)} / ${gateType(gate)}`}
                           </div>
                         </div>
 
@@ -369,6 +412,11 @@ function ShipmentDetail({
                               <div className="ntg-timeline-secondary">
                                 {fmtDate(event.timestamp)}{!isCustomerView && ` / conf ${shipmentService.confidencePercent(event)}`}
                               </div>
+                              {!isCustomerView && (
+                                <div className="ntg-timeline-secondary">
+                                  {eventSource(event)}
+                                </div>
+                              )}
                             </>
                           ) : (
                             <div className="ntg-timeline-awaiting">Awaiting event</div>
@@ -383,6 +431,9 @@ function ShipmentDetail({
                       )}
 
                       {fired && validationStatus !== "confirmed" && event.reason && (
+                        <div className="ntg-timeline-reason">{event.reason}</div>
+                      )}
+                      {fired && validationStatus === "confirmed" && event.reason && !isCustomerView && (
                         <div className="ntg-timeline-reason">{event.reason}</div>
                       )}
                     </div>
@@ -405,6 +456,9 @@ function ShipmentDetail({
                         <div className="ntg-review-event-title">{gate?.name || eventGateId(event)}</div>
                         <div className="ntg-review-event-meta ntg-mono">
                           {shipmentService.confidenceLabel(event)} / confidence {shipmentService.confidencePercent(event)} / {fmtTime(event.timestamp)}
+                        </div>
+                        <div className="ntg-review-event-meta">
+                          {gateOwner(gate)} / {eventSource(event)}
                         </div>
                       </div>
                       <div className="ntg-review-event-reason">{event.reason}</div>
