@@ -11,6 +11,8 @@ function cloneBootstrapPayload(data = shipmentData) {
     CORRIDORS: data.CORRIDORS.map((corridor) => ({ ...corridor, gates: [...corridor.gates] })),
     SHIPMENTS: data.SHIPMENTS.map(cloneShipment),
     GATE_VOLUME_24H: { ...data.GATE_VOLUME_24H },
+    EXCEPTIONS: data.EXCEPTIONS ? data.EXCEPTIONS.map((exception) => ({ ...exception })) : undefined,
+    REJECTED_EVENTS: data.REJECTED_EVENTS ? data.REJECTED_EVENTS.map((event) => ({ ...event })) : undefined,
     NOW_REF: data.NOW_REF,
   };
 }
@@ -46,7 +48,10 @@ async function requestJson(url, options = {}) {
 const LOCAL_BOOTSTRAP_BASELINE = cloneBootstrapPayload(shipmentData);
 
 function cloneEvent(event) {
-  return { ...event };
+  return {
+    ...event,
+    validation_checks: event.validation_checks ? event.validation_checks.map((check) => ({ ...check })) : undefined,
+  };
 }
 
 function cloneShipment(shipment) {
@@ -54,6 +59,10 @@ function cloneShipment(shipment) {
     ...shipment,
     route: [...shipment.route],
     events: shipment.events.map(cloneEvent),
+    reviewEvents: shipment.reviewEvents ? shipment.reviewEvents.map(cloneEvent) : undefined,
+    equipment_assignments: shipment.equipment_assignments
+      ? shipment.equipment_assignments.map((assignment) => ({ ...assignment }))
+      : undefined,
     flags: shipment.flags ? [...shipment.flags] : undefined,
   };
 }
@@ -81,9 +90,11 @@ function buildShipmentStats(shipments) {
 }
 
 function getRecentShipmentEvents(shipments, limit = 8) {
-  return [...shipments]
-    .filter((shipment) => shipment.events.length > 0)
-    .map((shipment) => ({ shipment, event: shipment.events[shipment.events.length - 1] }))
+  return shipments
+    .flatMap((shipment) => [
+      ...(shipment.events || []).map((event) => ({ shipment, event })),
+      ...(shipment.reviewEvents || []).map((event) => ({ shipment, event })),
+    ])
     .sort((a, b) => new Date(b.event.timestamp) - new Date(a.event.timestamp))
     .slice(0, limit);
 }
@@ -157,11 +168,11 @@ async function resetBootstrapData() {
   }
 }
 
-async function simulateNextShipmentEventRemote({ shipments, visibleShipments, now }) {
+async function simulateNextShipmentEventRemote({ shipments, visibleShipments, now, scenario = "confirmed" }) {
   try {
     const result = await requestJson(`${API_ROOT}/simulate`, {
       method: "POST",
-      body: JSON.stringify({ now }),
+      body: JSON.stringify({ now, scenario }),
     });
     hydrateBootstrapPayload(result.payload);
     return {
@@ -191,6 +202,29 @@ async function simulateNextShipmentEventRemote({ shipments, visibleShipments, no
   }
 }
 
+function confidenceStatus(event) {
+  const status = event.status;
+  if (status === "confirmed" || status === "needs_review" || status === "rejected") return status;
+
+  const confidence = Number(event.confidence_score ?? event.confidence ?? 0);
+  if (confidence < 0.7) return "rejected";
+  if (confidence < 0.9) return "needs_review";
+  return "confirmed";
+}
+
+function confidenceLabel(event) {
+  return ({
+    confirmed: "Confirmed",
+    needs_review: "Needs review",
+    rejected: "Rejected",
+  })[confidenceStatus(event)] || "Confirmed";
+}
+
+function confidencePercent(event) {
+  const confidence = Number(event.confidence_score ?? event.confidence ?? 0);
+  return `${Math.round(confidence * 100)}%`;
+}
+
 NTG.domain.shipments.service = {
   cloneBootstrapPayload,
   hydrateBootstrapPayload,
@@ -203,4 +237,7 @@ NTG.domain.shipments.service = {
   loadBootstrapData,
   resetBootstrapData,
   simulateNextShipmentEventRemote,
+  confidenceStatus,
+  confidenceLabel,
+  confidencePercent,
 };

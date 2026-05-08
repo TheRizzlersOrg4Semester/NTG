@@ -5,6 +5,7 @@ NTG.features.shipments = NTG.features.shipments || {};
 const { useState, useMemo, useDeferredValue } = React;
 const { fmtTime, fmtDate, fmtDelta, statusLabel } = NTG.shared.utils.formatters;
 const shipmentData = NTG.domain.shipments.data;
+const shipmentService = NTG.domain.shipments.service;
 const { DenmarkMap, LeafletDenmark } = NTG.features.maps;
 
 const STATUS_TONES = {
@@ -29,6 +30,10 @@ function deltaTrend(value) {
   if (value.startsWith("-")) return "improving";
   if (value.startsWith("+")) return "slipping";
   return "steady";
+}
+
+function eventGateId(event) {
+  return event.gate_id || event.gate;
 }
 
 function ShipmentList({ shipments, onSelect, selectedId, density, now }) {
@@ -122,7 +127,7 @@ function ShipmentList({ shipments, onSelect, selectedId, density, now }) {
 
             {filtered.map((shipment) => {
               const lastEvent = shipment.events[shipment.events.length - 1];
-              const lastGate = lastEvent ? shipmentData.GATE_BY_ID[lastEvent.gate] : null;
+              const lastGate = lastEvent ? shipmentData.GATE_BY_ID[eventGateId(lastEvent)] : null;
               const selected = shipment.id === selectedId;
 
               return (
@@ -211,10 +216,10 @@ function ShipmentDetail({
   const isCustomerView = audienceMode === "customer";
   const detailMapVariant = mapVariant === "europe-network" ? "geographic" : mapVariant;
   const route = shipment.route.map((id) => shipmentData.GATE_BY_ID[id]).filter(Boolean);
-  const eventsByGate = Object.fromEntries(shipment.events.map((event) => [event.gate, event]));
+  const eventsByGate = Object.fromEntries(shipment.events.map((event) => [eventGateId(event), event]));
   const lastEventIndex = shipment.events.length - 1;
   const lastEvent = shipment.events[lastEventIndex];
-  const lastGate = lastEvent ? shipmentData.GATE_BY_ID[lastEvent.gate] : null;
+  const lastGate = lastEvent ? shipmentData.GATE_BY_ID[eventGateId(lastEvent)] : null;
   const nextGate = shipment.route[shipment.events.length] ? shipmentData.GATE_BY_ID[shipment.route[shipment.events.length]] : null;
   const shipmentTone = statusTone(shipment.status);
 
@@ -222,7 +227,7 @@ function ShipmentDetail({
   for (let index = 0; index < shipment.events.length - 1; index += 1) {
     const start = new Date(shipment.events[index].timestamp).getTime();
     const end = new Date(shipment.events[index + 1].timestamp).getTime();
-    segments.push({ from: shipment.events[index].gate, to: shipment.events[index + 1].gate, duration: end - start });
+    segments.push({ from: eventGateId(shipment.events[index]), to: eventGateId(shipment.events[index + 1]), duration: end - start });
   }
 
   return (
@@ -329,6 +334,7 @@ function ShipmentDetail({
               {route.map((gate, index) => {
                 const event = eventsByGate[gate.id];
                 const fired = !!event;
+                const validationStatus = fired ? shipmentService.confidenceStatus(event) : "pending";
                 const isLast = index === route.length - 1;
                 const isCurrent = index === lastEventIndex && index < route.length - 1;
                 const segment = segments.find((item) => item.to === gate.id);
@@ -345,6 +351,11 @@ function ShipmentDetail({
                             {gate.name}
                             {!fired && <span className="ntg-timeline-tag ntg-timeline-tag--expected">expected</span>}
                             {isCurrent && <span className="ntg-timeline-tag ntg-timeline-tag--current">current</span>}
+                            {fired && (
+                              <span className="ntg-validation-pill" data-validation-status={validationStatus}>
+                                {shipmentService.confidenceLabel(event)}
+                              </span>
+                            )}
                           </div>
                           <div className="ntg-eyebrow ntg-timeline-meta">
                             {isCustomerView ? gate.type : `Tier ${gate.tier} / ${gate.type}`}
@@ -356,7 +367,7 @@ function ShipmentDetail({
                             <>
                               <div className="ntg-timeline-primary">{fmtTime(event.timestamp)}</div>
                               <div className="ntg-timeline-secondary">
-                                {fmtDate(event.timestamp)}{!isCustomerView && ` / conf ${event.confidence.toFixed(2)}`}
+                                {fmtDate(event.timestamp)}{!isCustomerView && ` / conf ${shipmentService.confidencePercent(event)}`}
                               </div>
                             </>
                           ) : (
@@ -370,12 +381,39 @@ function ShipmentDetail({
                           leg time {Math.round(segment.duration / 60000)}m
                         </div>
                       )}
+
+                      {fired && validationStatus !== "confirmed" && event.reason && (
+                        <div className="ntg-timeline-reason">{event.reason}</div>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+
+          {shipment.reviewEvents && shipment.reviewEvents.length > 0 && (
+            <div className="ntg-panel ntg-detail-timeline-panel">
+              <SectionLabel>Manual review events</SectionLabel>
+              <div className="ntg-review-event-list">
+                {shipment.reviewEvents.map((event) => {
+                  const gate = shipmentData.GATE_BY_ID[eventGateId(event)];
+                  const validationStatus = shipmentService.confidenceStatus(event);
+                  return (
+                    <div key={event.event_id || `${eventGateId(event)}-${event.timestamp}`} className="ntg-review-event-card" data-validation-status={validationStatus}>
+                      <div>
+                        <div className="ntg-review-event-title">{gate?.name || eventGateId(event)}</div>
+                        <div className="ntg-review-event-meta ntg-mono">
+                          {shipmentService.confidenceLabel(event)} / confidence {shipmentService.confidencePercent(event)} / {fmtTime(event.timestamp)}
+                        </div>
+                      </div>
+                      <div className="ntg-review-event-reason">{event.reason}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -409,7 +447,11 @@ function DetailLine({ label, value, tone = "default" }) {
 }
 
 function ExceptionQueue({ shipments, onSelect, density, now }) {
-  const flagged = shipments.filter((shipment) => shipment.status === "exception" || shipment.status === "at-risk");
+  const flagged = shipments.filter((shipment) => (
+    shipment.status === "exception" ||
+    shipment.status === "at-risk" ||
+    (shipment.reviewEvents && shipment.reviewEvents.length > 0)
+  ));
 
   return (
     <div className="ntg-exceptions-view" data-density={density}>
@@ -434,7 +476,9 @@ function ExceptionQueue({ shipments, onSelect, density, now }) {
         {flagged.map((shipment) => {
           const severity = shipment.status === "exception" ? "Severity 1" : "Severity 2";
           const lastEvent = shipment.events[shipment.events.length - 1];
-          const lastGate = lastEvent ? shipmentData.GATE_BY_ID[lastEvent.gate] : null;
+          const latestReviewEvent = shipment.reviewEvents?.[shipment.reviewEvents.length - 1];
+          const lastGate = lastEvent ? shipmentData.GATE_BY_ID[eventGateId(lastEvent)] : null;
+          const reviewGate = latestReviewEvent ? shipmentData.GATE_BY_ID[eventGateId(latestReviewEvent)] : null;
 
           return (
             <button
@@ -450,11 +494,14 @@ function ExceptionQueue({ shipments, onSelect, density, now }) {
                   <span className="ntg-mono ntg-exception-id">{shipment.id}</span>
                 </div>
                 <div className="ntg-exception-title">
-                  {shipment.flags ? shipment.flags[0] : "Status flagged"}
+                  {latestReviewEvent
+                    ? `${shipmentService.confidenceLabel(latestReviewEvent)} at ${reviewGate?.name || eventGateId(latestReviewEvent)}`
+                    : shipment.flags ? shipment.flags[0] : "Status flagged"}
                 </div>
                 <div className="ntg-exception-copy">
                   {shipment.customer} / {shipment.origin} -> {shipment.destination}
                   {lastGate && <> / last seen {lastGate.name} at {fmtTime(lastEvent.timestamp)}</>}
+                  {latestReviewEvent && <> / {latestReviewEvent.reason}</>}
                 </div>
               </div>
               <div className="ntg-exception-meta ntg-mono">

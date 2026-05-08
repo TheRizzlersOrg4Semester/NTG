@@ -14,7 +14,7 @@ const {
   TweakRadio,
   TweakButton,
 } = NTG.shared.ui;
-const { Brand, MiniStat, AudienceSwitch } = NTG.app.shellUi;
+const { Brand, AudienceSwitch } = NTG.app.shellUi;
 const { Overview } = NTG.features.dashboard;
 const { ShipmentList, ShipmentDetail, ExceptionQueue, Analytics } = NTG.features.shipments;
 
@@ -111,11 +111,13 @@ function App() {
     return () => clearTimeout(id);
   }, [recentEvent]);
 
-  const simulateEvent = async () => {
+  const simulateEvent = async (scenario = "confirmed") => {
+    const selectedScenario = typeof scenario === "string" ? scenario : "confirmed";
     const result = await shipmentService.simulateNextShipmentEventRemote({
       shipments,
       visibleShipments: displayedShipments,
       now,
+      scenario: selectedScenario,
     });
     if (!result) return;
 
@@ -152,23 +154,9 @@ function App() {
           <aside className="ntg-panel ntg-sidebar">
             <Brand />
 
-            <div className="ntg-panel ntg-sidebar-hero">
-              <div className="ntg-sidebar-hero-orb" />
-              <div className="ntg-sidebar-hero-copy">
-                <div className="ntg-audience-section-title">Control tower</div>
-                <div className="ntg-sidebar-hero-title">Denmark freight visibility</div>
-                <p className="ntg-sidebar-hero-text">
-                  A calmer, more premium dashboard for checkpoint-confirmed shipment progress.
-                </p>
-              </div>
-            </div>
-
             <div>
               <div className="ntg-audience-section-title">Audience mode</div>
               <AudienceSwitch value={tweaks.audienceMode} onChange={(mode) => setTweak("audienceMode", mode)} />
-              {isCustomerView && (
-                <div className="ntg-customer-pill">Portal account: {customerPortalName}</div>
-              )}
             </div>
 
             <nav className="ntg-nav">
@@ -200,33 +188,13 @@ function App() {
             </nav>
 
             <div className="ntg-sidebar-footer">
-              <div className="ntg-panel ntg-sidebar-pulse">
-                <div className="ntg-sidebar-card-title">
-                  {isCustomerView ? "Portfolio snapshot" : "Network pulse"}
+              <div className="ntg-sidebar-account">
+                <div className="ntg-audience-section-title">Portal account</div>
+                <div className="ntg-sidebar-account-name">
+                  {isCustomerView ? customerPortalName : "Internal control tower"}
                 </div>
-                <div className="ntg-mini-grid">
-                  <MiniStat label={isCustomerView ? "Shipments" : "Gates"} value={isCustomerView ? displayedShipments.length : shipmentData.GATES.length} />
-                  <MiniStat label={isCustomerView ? "Delivered" : "Corridors"} value={isCustomerView ? stats.delivered : shipmentData.CORRIDORS.length} tone="success" />
-                  <MiniStat label="Active" value={stats.inTransit} tone="info" />
-                  <MiniStat label={isCustomerView ? "Attention" : "Issues"} value={stats.atRisk + stats.exception} tone="warning" />
-                </div>
-              </div>
-
-              <div className="ntg-panel ntg-live-card">
-                <div className="ntg-live-header">
-                  <div>
-                    <div className="ntg-live-title">Live feed</div>
-                    <div className="ntg-live-meta">
-                      {fmtDate(now)} at {fmtTime(now)} CET
-                    </div>
-                    <div className="ntg-live-status" data-source={dataSource}>
-                      {dataSource === "database" ? "Database synced" : dataSource === "fallback" ? "Fallback mode" : "Checking backend"}
-                    </div>
-                  </div>
-                  <div className="ntg-live-indicator">
-                    <span className="ntg-live-dot ntg-dot" />
-                    LIVE
-                  </div>
+                <div className="ntg-sidebar-account-meta">
+                  {fmtDate(now)} {fmtTime(now)} CET
                 </div>
               </div>
             </div>
@@ -246,6 +214,7 @@ function App() {
                 audienceMode={tweaks.audienceMode}
                 customerName={customerPortalName}
                 onSimulate={simulateEvent}
+                dataSource={dataSource}
                 layout={layout}
               />
             )}
@@ -312,8 +281,11 @@ function App() {
               <div>
                 <div className="ntg-toast-eyebrow">Gate event</div>
                 <div className="ntg-toast-title">
-                  <span className="ntg-toast-strong">{recentEvent.shipment}</span> passed <span className="ntg-toast-accent">{recentEvent.gate}</span>
+                  <span className="ntg-toast-strong">{recentEvent.shipment}</span> {recentEvent.status || "confirmed"} at <span className="ntg-toast-accent">{recentEvent.gate}</span>
                 </div>
+                {recentEvent.reason && recentEvent.status !== "confirmed" && (
+                  <div className="ntg-toast-eyebrow">{recentEvent.reason}</div>
+                )}
               </div>
             </div>
           )}
@@ -342,7 +314,11 @@ function App() {
               <TweakToggle label="Tier 4 - Customer sites" value={tweaks.showTier4} onChange={(value) => setTweak("showTier4", value)} />
             </TweakSection>
             <TweakSection label="Live data">
-              <TweakButton label="Simulate gate event" onClick={simulateEvent} />
+              <TweakButton label="Confirmed event" onClick={() => simulateEvent("confirmed")} />
+              <TweakButton label="Low confidence" onClick={() => simulateEvent("low_confidence")} />
+              <TweakButton label="Wrong gate" onClick={() => simulateEvent("wrong_gate")} />
+              <TweakButton label="Route deviation" onClick={() => simulateEvent("route_deviation")} />
+              <TweakButton label="Equipment handover" onClick={() => simulateEvent("equipment_handover")} />
               <TweakButton label="Reset to initial state" onClick={resetShipments} secondary />
             </TweakSection>
           </TweaksPanel>

@@ -8,7 +8,8 @@ const {
   resetBootstrapState,
   getDatabaseHealth,
 } = require("./database");
-const { buildBootstrapResponse, simulateNextEvent } = require("./bootstrap-state");
+const { buildBootstrapResponse, simulateScenarioEvent } = require("./bootstrap-state");
+const { applyGateEvent } = require("./validation-engine");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -55,13 +56,39 @@ app.post("/api/simulate", async (req, res, next) => {
   try {
     const payload = getBootstrapState(database);
     const now = Number(req.body?.now || Date.now());
-    const result = simulateNextEvent(payload, now);
+    const scenario = req.body?.scenario || "confirmed";
+    const result = simulateScenarioEvent(payload, null, now, scenario);
 
     saveBootstrapState(database, result.payload);
 
     res.json({
       payload: buildBootstrapResponse(result.payload),
       recentEvent: result.recentEvent,
+      validation: result.validation,
+      event: result.event,
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/gate-events", async (req, res, next) => {
+  try {
+    const payload = getBootstrapState(database);
+    const result = applyGateEvent(payload, req.body || {});
+
+    saveBootstrapState(database, result.payload);
+
+    res.json({
+      validation: {
+        status: result.validation.status,
+        reason: result.validation.reason,
+        validation_checks: result.validation.validation_checks,
+      },
+      event: result.event,
+      shipment: result.shipment,
+      payload: buildBootstrapResponse(result.payload),
       source: "database",
     });
   } catch (error) {

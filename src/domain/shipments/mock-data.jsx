@@ -6,6 +6,14 @@ NTG.domain = NTG.domain || {};
 NTG.domain.shipments = NTG.domain.shipments || {};
 
 const GATES = [
+  // UK -> Denmark/Nordics corridor checkpoints
+  { id: "FOLKESTONE_CHECKIN", name: "Folkestone Check-in", tier: 1, type: "LeShuttle Gate", x: 80, y: 640, lon: 1.16, lat: 51.10, gate_owner: "LeShuttle" },
+  { id: "DOVER_CHECKIN", name: "Dover Check-in", tier: 1, type: "Ferry Port", x: 95, y: 620, lon: 1.31, lat: 51.13, gate_owner: "DFDS / Port of Dover" },
+  { id: "CALAIS_EXIT", name: "Calais Exit", tier: 1, type: "Ferry Port", x: 145, y: 625, lon: 1.86, lat: 50.95, gate_owner: "Port Boulogne Calais" },
+  { id: "COQUELLES_EXIT", name: "Coquelles Exit", tier: 1, type: "LeShuttle Gate", x: 150, y: 612, lon: 1.81, lat: 50.93, gate_owner: "LeShuttle" },
+  { id: "PUTTGARDEN_CHECKIN", name: "Puttgarden Check-in", tier: 1, type: "Ferry Port", x: 675, y: 632, lon: 11.22, lat: 54.50, gate_owner: "Scandlines" },
+  { id: "RODBY_EXIT", name: "Rodby Exit", tier: 1, type: "Ferry Port", x: 690, y: 600, lon: 11.35, lat: 54.66, gate_owner: "Scandlines" },
+  { id: "CPH_TERMINAL_ARRIVAL", name: "CPH Terminal Arrival", tier: 1, type: "Terminal", x: 780, y: 425, lon: 12.47, lat: 55.66, gate_owner: "NTG Copenhagen Terminal" },
   // Tier 1 — National chokepoints
   { id: "PAD", name: "Padborg",          tier: 1, type: "Border",   x: 360, y: 600, lon: 9.36, lat: 54.83 },
   { id: "KOL", name: "Kolding Junction", tier: 1, type: "Junction", x: 410, y: 470, lon: 9.47, lat: 55.49 },
@@ -31,6 +39,7 @@ const GATES = [
 
 // Corridors — schematic polyline paths through the gate IDs
 const CORRIDORS = [
+  { id: "UKDK", name: "UK-DK Pulse Corridor", color: "ember", gates: ["FOLKESTONE_CHECKIN", "CALAIS_EXIT", "PUTTGARDEN_CHECKIN", "RODBY_EXIT", "CPH_TERMINAL_ARRIVAL"] },
   { id: "A", name: "Corridor A · Germany → Jutland", color: "ember",  gates: ["PAD", "KOL", "VFJ", "AAR", "AAL"] },
   { id: "B", name: "Corridor B · Jutland → Zealand",  color: "ink",    gates: ["TLV", "OSE", "STB", "CPH"] },
   { id: "C", name: "Corridor C · Copenhagen → Sweden", color: "ember", gates: ["CPH", "ORS"] },
@@ -56,6 +65,79 @@ function evt(gateId, offsetMin, confidence = 0.97) {
 }
 
 const SHIPMENTS = [
+  {
+    id: "SHP-2026-00421",
+    shipment_id: "SHP-2026-00421",
+    customer: "Nordic Retail Imports",
+    origin: "Birmingham, UK",
+    destination: "Copenhagen, DK",
+    cargo: "Retail goods / 26 pallets",
+    weightKg: 15_600,
+    plate: "hashed:8f41ab92",
+    tractor_plate_hash: "8f41ab92",
+    equipment_id: "TRAILER-NTG-4412",
+    trailer_id: "TRAILER-NTG-4412",
+    carrier: "NTG Road UK-DK",
+    eta: NOW_REF + 96 * M,
+    status: "in-transit",
+    progress: 0.6,
+    direction: "INBOUND_DK",
+    planned_route_id: "ROUTE-UK-DK-001",
+    route: ["FOLKESTONE_CHECKIN", "CALAIS_EXIT", "PUTTGARDEN_CHECKIN", "RODBY_EXIT", "CPH_TERMINAL_ARRIVAL"],
+    equipment_assignments: [
+      {
+        shipment_id: "SHP-2026-00421",
+        carrier_id: "NTG-ROAD-UK",
+        trailer_id: "TRAILER-NTG-4412",
+        equipment_id: "TRAILER-NTG-4412",
+        tractor_plate_hash: "8f41ab92",
+        valid_from: "2026-04-20T00:00:00Z",
+        valid_to: "2026-05-07T13:00:00Z",
+      },
+      {
+        shipment_id: "SHP-2026-00421",
+        carrier_id: "NTG-ROAD-DK",
+        trailer_id: "TRAILER-NTG-4412",
+        equipment_id: "TRAILER-NTG-4412",
+        tractor_plate_hash: "f3d9c014",
+        valid_from: "2026-05-07T13:00:01Z",
+        valid_to: null,
+      },
+    ],
+    events: [
+      {
+        event_id: "evt_ukdk_001",
+        gate: "FOLKESTONE_CHECKIN",
+        gate_id: "FOLKESTONE_CHECKIN",
+        timestamp: new Date(NOW_REF - 620 * M).toISOString(),
+        confidence: 0.98,
+        confidence_score: 0.98,
+        status: "confirmed",
+        reason: "Event accepted as a verified freight milestone.",
+      },
+      {
+        event_id: "evt_ukdk_002",
+        gate: "CALAIS_EXIT",
+        gate_id: "CALAIS_EXIT",
+        timestamp: new Date(NOW_REF - 545 * M).toISOString(),
+        confidence: 0.96,
+        confidence_score: 0.96,
+        status: "confirmed",
+        reason: "Event accepted as a verified freight milestone.",
+      },
+      {
+        event_id: "evt_ukdk_003",
+        gate: "PUTTGARDEN_CHECKIN",
+        gate_id: "PUTTGARDEN_CHECKIN",
+        timestamp: new Date(NOW_REF - 84 * M).toISOString(),
+        confidence: 0.94,
+        confidence_score: 0.94,
+        status: "confirmed",
+        reason: "Event accepted as a verified freight milestone.",
+      },
+    ],
+    reviewEvents: [],
+  },
   {
     id: "NTG-2611-9842",
     customer: "Skagen Cold Chain A/S",
@@ -309,6 +391,8 @@ const SHIPMENTS = [
 
 // Aggregate gate event counts (last 24h)
 const GATE_VOLUME_24H = {
+  FOLKESTONE_CHECKIN: 42, DOVER_CHECKIN: 58, CALAIS_EXIT: 61, COQUELLES_EXIT: 37,
+  PUTTGARDEN_CHECKIN: 49, RODBY_EXIT: 51, CPH_TERMINAL_ARRIVAL: 74,
   PAD: 218, KOL: 312, VFJ: 188, STB: 274, ORS: 196,
   HIR: 88, FRH: 71, AAR: 152, RBY: 64, GED: 43,
   TLV: 168, OSE: 144, AAL: 119, CPH: 287,

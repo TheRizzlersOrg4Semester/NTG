@@ -6,8 +6,30 @@ const { useMemo } = React;
 const shipmentData = NTG.domain.shipments.data;
 const shipmentService = NTG.domain.shipments.service;
 const { LeafletDenmark, DenmarkMap, EuropeNetworkMap } = NTG.features.maps;
-const { fmtDate, fmtTime } = NTG.shared.utils.formatters;
-const { HeroChip, HeroMetric, BigKPI, MapBadge, SignalTile, Thesis } = NTG.features.dashboard.ui;
+const { fmtDate, fmtTime, fmtDelta, statusLabel } = NTG.shared.utils.formatters;
+const { MapBadge } = NTG.features.dashboard.ui;
+
+function eventGateId(event) {
+  return event.gate_id || event.gate;
+}
+
+function lastConfirmedEvent(shipment) {
+  return shipment.events?.[shipment.events.length - 1] || null;
+}
+
+function nextGateForShipment(shipment) {
+  return shipment.route?.[shipment.events?.length || 0];
+}
+
+function averageConfidence(shipments) {
+  const events = shipments.flatMap((shipment) => [
+    ...(shipment.events || []),
+    ...(shipment.reviewEvents || []),
+  ]);
+  if (!events.length) return 0;
+  const total = events.reduce((sum, event) => sum + Number(event.confidence_score ?? event.confidence ?? 0), 0);
+  return total / events.length;
+}
 
 function Overview({
   shipments,
@@ -21,6 +43,7 @@ function Overview({
   audienceMode,
   customerName,
   onSimulate,
+  dataSource,
   layout,
 }) {
   const isCustomerView = audienceMode === "customer";
@@ -35,205 +58,264 @@ function Overview({
 
   const activeCorridors = new Set(shipments.map((shipment) => `${shipment.origin}->${shipment.destination}`)).size;
   const highlightedAttention = stats.atRisk + stats.exception;
-  const trackedCoverage = shipments.length ? Math.round(((stats.inTransit + stats.delivered) / shipments.length) * 100) : 0;
+  const verifiedMilestones = shipments.reduce((sum, shipment) => sum + (shipment.events?.length || 0), 0);
+  const avgConfidence = averageConfidence(shipments);
+  const attentionShipments = shipments.filter((shipment) => (
+    shipment.status === "at-risk" ||
+    shipment.status === "exception" ||
+    (shipment.reviewEvents && shipment.reviewEvents.length > 0)
+  ));
   const mapHeight = layout.isNarrow ? 360 : layout.isTablet ? 420 : 540;
 
   return (
     <div className="ntg-overview">
-      <section className="ntg-panel ntg-overview-hero">
-        <div className="ntg-overview-glow ntg-overview-glow--accent" />
-        <div className="ntg-overview-glow ntg-overview-glow--info" />
-
-        <div className="ntg-overview-hero-grid">
+      <header className="ntg-ops-header">
+        <div>
+          <div className="ntg-eyebrow">
+            {isCustomerView ? `Customer portal / ${customerName}` : "Internal control tower / NTG Pulse"}
+          </div>
+          <h1 className="ntg-ops-title">
+            Verified freight milestones
+          </h1>
+        </div>
+        <div className="ntg-ops-header-meta">
           <div>
-            <div className="ntg-eyebrow">
-              {isCustomerView ? `Customer portal / ${customerName}` : "Pilot dashboard / Denmark freight network"}
-            </div>
-            <h1 className="ntg-heading-display ntg-overview-heading">
-              {isCustomerView ? "Premium shipment visibility for your own freight." : "A more polished control room for checkpoint-led freight intelligence."}
-            </h1>
-            <p className="ntg-overview-copy">
-              {isCustomerView
-                ? "Follow confirmed milestone events without exposing sensitive network data. The view stays clean, current, and focused on the shipments your team actually needs."
-                : "Instead of waiting for manual updates, the network itself confirms movement. Bridges, ports, terminals, and customer checkpoints create a calmer operational picture with time-stamped proof of progress."}
-            </p>
-
-            <div className="ntg-overview-chip-row">
-              <HeroChip label="Tracked shipments" value={shipments.length} />
-              <HeroChip label="Live corridors" value={activeCorridors} />
-              <HeroChip label={isCustomerView ? "Milestones confirmed" : "Coverage confidence"} value={isCustomerView ? recent.length : `${trackedCoverage}%`} />
-            </div>
+            <span className="ntg-live-dot ntg-dot" />
+            <span>{dataSource === "database" ? "Database synced" : dataSource === "fallback" ? "Fallback mode" : "Checking backend"}</span>
           </div>
-
-          <div className="ntg-panel ntg-overview-brief">
-            <div>
-              <div className="ntg-eyebrow">Operational brief</div>
-              <div className="ntg-overview-brief-title">
-                {isCustomerView ? "Cleaner customer tracking." : "Executive-grade signal, not noise."}
-              </div>
-            </div>
-
-            <div className="ntg-overview-brief-metrics">
-              <HeroMetric label="Attention needed" value={highlightedAttention} sub="Shipments requiring operator review" tone="warning" />
-              <HeroMetric label="Live now" value={stats.inTransit} sub="Tracked loads still moving across the network" tone="info" />
-              <HeroMetric label="Current timestamp" value={`${fmtDate(now)} ${fmtTime(now)}`} sub="Synthetic live timeline" tone="success" mono />
-            </div>
-          </div>
+          <div>Last updated {fmtDate(now)} {fmtTime(now)} CET</div>
         </div>
+      </header>
+
+      <section className="ntg-summary-strip">
+        <Metric label="Active shipments" value={stats.inTransit} />
+        <Metric label="Attention needed" value={highlightedAttention} tone={highlightedAttention ? "warning" : "success"} />
+        <Metric label="Verified milestones" value={verifiedMilestones} tone="success" />
+        <Metric label="Average confidence" value={`${Math.round(avgConfidence * 100)}%`} tone="info" />
       </section>
 
-      <section className="ntg-kpi-grid">
-        <BigKPI label="In transit" value={stats.inTransit} note="Actively progressing right now" tone="info" delay={0} />
-        <BigKPI label="At risk" value={stats.atRisk} note="Potentially late or degraded" tone="warning" delay={0.04} />
-        <BigKPI label="Exceptions" value={stats.exception} note="Requires immediate action" tone="danger" delay={0.08} />
-        <BigKPI label="Delivered 24h" value={stats.delivered} note="Successfully closed milestones" tone="success" delay={0.12} />
-      </section>
-
-      <section className="ntg-overview-network">
-        <div className="ntg-panel ntg-overview-map-panel">
-          <div className="ntg-overview-panel-header">
-            <div>
-              <div className="ntg-eyebrow">
-                {isCustomerView ? "Route confirmation" : isEuropeNetwork ? "Imported network view" : "Network view"}
+      <section className="ntg-control-grid">
+        <div className="ntg-control-main">
+          <div className="ntg-section-block ntg-map-block">
+            <div className="ntg-section-header">
+              <div>
+                <div className="ntg-eyebrow">
+                  {isCustomerView ? "Route confirmation" : isEuropeNetwork ? "Network corridor" : "Shipment corridor map"}
+                </div>
+                <h2 className="ntg-section-title">
+                  {isCustomerView
+                    ? "Verified route footprint"
+                    : isEuropeNetwork
+                      ? "European network coverage"
+                      : "Checkpoint activity across active corridors"}
+                </h2>
               </div>
-              <div className="ntg-overview-panel-title">
-                {isCustomerView
-                  ? "Your milestone footprint across Denmark"
-                  : isEuropeNetwork
-                    ? "NTG corridor coverage across the wider European network"
-                    : "Checkpoint activity across the pilot corridors"}
+              <div className="ntg-map-badge-row">
+                <MapBadge
+                  label={
+                    isEuropeNetwork
+                      ? "Europe network"
+                      : requestedEuropeNetwork && isCustomerView
+                        ? "Customer-safe map"
+                        : tweaks.mapVariant === "geographic"
+                          ? "Geographic"
+                          : "Schematic"
+                  }
+                />
+                <MapBadge label={`${mapGates.length} gates`} accent />
               </div>
             </div>
-            <div className="ntg-map-badge-row">
-              <MapBadge
-                label={
-                  isEuropeNetwork
-                    ? "Europe network"
-                    : requestedEuropeNetwork && isCustomerView
-                      ? "Customer-safe map"
-                      : tweaks.mapVariant === "geographic"
-                        ? "Geographic view"
-                        : "Schematic view"
-                }
-              />
-              <MapBadge label={isEuropeNetwork ? "19 hubs visible" : `${mapGates.length} gates visible`} accent />
-            </div>
-          </div>
 
-          {requestedEuropeNetwork && isCustomerView && (
-            <div className="ntg-overview-note">
-              The Europe network view is kept internal-only, so customer mode stays focused on the shipment route footprint.
-            </div>
-          )}
-
-          <div className="ntg-overview-map-frame">
-            {isEuropeNetwork ? (
-              <EuropeNetworkMap
-                height={mapHeight}
-                dark={tweaks.dark}
-                inkColor={theme.ink}
-                paperColor={theme.paper}
-                accentColor={theme.accent}
-              />
-            ) : tweaks.mapVariant === "geographic" ? (
-              <LeafletDenmark
-                gates={mapGates}
-                corridors={mapCorridors}
-                shipments={shipments}
-                selectedShipmentId={selectedShipmentId}
-                visibleTiers={visibleTiers}
-                inkColor={theme.ink}
-                paperColor={theme.paper}
-                accentColor={theme.accent}
-                height={mapHeight}
-                dark={tweaks.dark}
-                onShipmentClick={(shipment) => setSelected(shipment)}
-              />
-            ) : (
-              <DenmarkMap
-                gates={mapGates}
-                corridors={mapCorridors}
-                shipments={shipments}
-                visibleTiers={visibleTiers}
-                showLabels={true}
-                inkColor={theme.ink}
-                paperColor={theme.paper}
-                accentColor={theme.accent}
-                mutedColor={theme.muted}
-                height={mapHeight}
-                variant={tweaks.mapVariant}
-                onShipmentClick={(shipment) => setSelected(shipment)}
-              />
+            {requestedEuropeNetwork && isCustomerView && (
+              <div className="ntg-overview-note">
+                Europe network view is internal-only; customer mode stays focused on verified shipment milestones.
+              </div>
             )}
-          </div>
-        </div>
 
-        <aside className="ntg-panel ntg-overview-feed-panel">
-          <div className="ntg-overview-feed-header">
-            <div>
-              <div className="ntg-eyebrow">
-                {isCustomerView ? "Recent confirmations" : "Recent gate events"}
-              </div>
-              <div className="ntg-overview-feed-title">Live event feed</div>
+            <div className="ntg-overview-map-frame">
+              {isEuropeNetwork ? (
+                <EuropeNetworkMap
+                  height={mapHeight}
+                  dark={tweaks.dark}
+                  inkColor={theme.ink}
+                  paperColor={theme.paper}
+                  accentColor={theme.accent}
+                />
+              ) : tweaks.mapVariant === "geographic" ? (
+                <LeafletDenmark
+                  gates={mapGates}
+                  corridors={mapCorridors}
+                  shipments={shipments}
+                  selectedShipmentId={selectedShipmentId}
+                  visibleTiers={visibleTiers}
+                  inkColor={theme.ink}
+                  paperColor={theme.paper}
+                  accentColor={theme.accent}
+                  height={mapHeight}
+                  dark={tweaks.dark}
+                  onShipmentClick={(shipment) => setSelected(shipment)}
+                />
+              ) : (
+                <DenmarkMap
+                  gates={mapGates}
+                  corridors={mapCorridors}
+                  shipments={shipments}
+                  visibleTiers={visibleTiers}
+                  showLabels={true}
+                  inkColor={theme.ink}
+                  paperColor={theme.paper}
+                  accentColor={theme.accent}
+                  mutedColor={theme.muted}
+                  height={mapHeight}
+                  variant={tweaks.mapVariant}
+                  onShipmentClick={(shipment) => setSelected(shipment)}
+                />
+              )}
             </div>
-            {!isCustomerView && (
-              <button onClick={onSimulate} className="ntg-simulate-button">
-                Simulate
-              </button>
-            )}
           </div>
 
-          <div className="ntg-scroll ntg-feed-list">
-            {recent.map(({ shipment, event }, index) => {
-              const gate = shipmentData.GATE_BY_ID[event.gate];
-              return (
-                <button
-                  key={`${shipment.id}-${index}`}
-                  onClick={() => setSelected(shipment)}
-                  className="ntg-panel ntg-interactive-card is-soft ntg-feed-card"
-                >
-                  <div className="ntg-feed-card-header">
-                    <div className="ntg-feed-card-gate">
-                      <span className="ntg-dot ntg-tone-accent" />
-                      <span className="ntg-feed-card-gate-name">{gate?.name}</span>
+          <div className="ntg-section-block ntg-active-shipments">
+            <div className="ntg-section-header">
+              <div>
+                <div className="ntg-eyebrow">Active shipments</div>
+                <h2 className="ntg-section-title">Shipment visibility table</h2>
+              </div>
+              <MapBadge label={`${shipments.length} visible`} />
+            </div>
+            <div className="ntg-active-table">
+              <div className="ntg-active-table-head">
+                <div>Shipment</div>
+                <div>Origin -> Destination</div>
+                <div>Latest verified</div>
+                <div>Next milestone</div>
+                <div>ETA</div>
+                <div>Confidence</div>
+                <div>Status</div>
+              </div>
+              {shipments.map((shipment) => {
+                const lastEvent = lastConfirmedEvent(shipment);
+                const lastGate = lastEvent ? shipmentData.GATE_BY_ID[eventGateId(lastEvent)] : null;
+                const nextGate = shipmentData.GATE_BY_ID[nextGateForShipment(shipment)];
+                const lastConfidence = lastEvent ? shipmentService.confidencePercent(lastEvent) : "-";
+                return (
+                  <button key={shipment.id} className="ntg-active-row" onClick={() => setSelected(shipment)} data-status={shipment.status}>
+                    <div>
+                      <div className="ntg-active-id">{shipment.id}</div>
+                      <div className="ntg-active-sub">{shipment.customer}</div>
                     </div>
-                    <span className="ntg-feed-card-time">{fmtTime(event.timestamp)}</span>
-                  </div>
-                  <div className="ntg-feed-card-meta">
-                    {shipment.id} / {shipment.customer}
-                  </div>
-                  <div className="ntg-feed-card-confidence">
-                    confidence {event.confidence.toFixed(2)}
-                  </div>
+                    <div className="ntg-active-route">
+                      <span>{shipment.origin}</span>
+                      <span className="ntg-active-arrow">-></span>
+                      <span>{shipment.destination}</span>
+                    </div>
+                    <div>{lastGate?.name || "Awaiting"}</div>
+                    <div>{nextGate?.name || "Final milestone"}</div>
+                    <div className="ntg-mono">{fmtTime(shipment.eta)} <span className="ntg-active-sub">{fmtDelta(shipment.eta, now)}</span></div>
+                    <div className="ntg-mono">{lastConfidence}</div>
+                    <div><span className="ntg-status-pill" data-status={shipment.status}>{statusLabel(shipment.status)}</span></div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <aside className="ntg-control-rail">
+          <div className="ntg-section-block ntg-event-log">
+            <div className="ntg-section-header">
+              <div>
+                <div className="ntg-eyebrow">
+                  {isCustomerView ? "Recent confirmations" : "Recent events"}
+                </div>
+                <h2 className="ntg-section-title">Gate event log</h2>
+              </div>
+              {!isCustomerView && (
+                <button onClick={onSimulate} className="ntg-simulate-button">
+                  Simulate
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            <div className="ntg-scroll ntg-feed-list">
+              {recent.map(({ shipment, event }, index) => {
+                const gate = shipmentData.GATE_BY_ID[eventGateId(event)];
+                const validationStatus = shipmentService.confidenceStatus(event);
+                const validationLabel = shipmentService.confidenceLabel(event);
+                return (
+                  <button
+                    key={`${shipment.id}-${index}`}
+                    onClick={() => setSelected(shipment)}
+                    className="ntg-feed-row"
+                    data-validation-status={validationStatus}
+                  >
+                    <span className="ntg-feed-status-dot" />
+                    <div className="ntg-feed-main">
+                      <div className="ntg-feed-topline">
+                        <span>{gate?.name || eventGateId(event)}</span>
+                        <span className="ntg-mono">{fmtTime(event.timestamp)}</span>
+                      </div>
+                      <div className="ntg-feed-meta">
+                        {shipment.id} / {validationLabel} / {shipmentService.confidencePercent(event)}
+                      </div>
+                      {validationStatus !== "confirmed" && event.reason && (
+                        <div className="ntg-feed-reason">{event.reason}</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="ntg-signal-grid">
-            <SignalTile label="Event cadence" value={recent.length} sub="Most recent confirmations in feed" />
-            <SignalTile label="Attention" value={highlightedAttention} sub="Loads needing human review" tone="warning" />
+          <div className="ntg-section-block ntg-attention-panel">
+            <div className="ntg-section-header">
+              <div>
+                <div className="ntg-eyebrow">Attention</div>
+                <h2 className="ntg-section-title">Needs review</h2>
+              </div>
+              <MapBadge label={String(attentionShipments.length)} accent={attentionShipments.length > 0} />
+            </div>
+            <div className="ntg-attention-list">
+              {attentionShipments.length === 0 && (
+                <div className="ntg-empty-compact">No shipments require review.</div>
+              )}
+              {attentionShipments.slice(0, 5).map((shipment) => {
+                const reviewEvent = shipment.reviewEvents?.[shipment.reviewEvents.length - 1];
+                const gate = reviewEvent ? shipmentData.GATE_BY_ID[eventGateId(reviewEvent)] : null;
+                return (
+                  <button key={shipment.id} onClick={() => setSelected(shipment)} className="ntg-attention-row">
+                    <div>
+                      <div className="ntg-active-id">{shipment.id}</div>
+                      <div className="ntg-active-sub">{gate?.name || shipment.flags?.[0] || statusLabel(shipment.status)}</div>
+                    </div>
+                    <div className="ntg-attention-reason">
+                      {reviewEvent?.reason || shipment.flags?.[0] || "Operational status requires review"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="ntg-section-block ntg-network-summary">
+            <div className="ntg-eyebrow">Network summary</div>
+            <div className="ntg-network-summary-grid">
+              <Metric label="Corridors" value={activeCorridors} />
+              <Metric label="Visible gates" value={mapGates.length} />
+              <Metric label="Delivered" value={stats.delivered} tone="success" />
+            </div>
           </div>
         </aside>
       </section>
+    </div>
+  );
+}
 
-      <section className="ntg-thesis-grid">
-        <Thesis
-          n="01"
-          title="Passive, not dependent"
-          body="Visibility no longer relies on driver compliance or manual scans. The infrastructure confirms progress on its own."
-        />
-        <Thesis
-          n="02"
-          title="Few checkpoints, broad coverage"
-          body="A limited set of strategic chokepoints captures a disproportionate share of the network. The story stays simple and scalable."
-        />
-        <Thesis
-          n="03"
-          title="Evidence over surveillance"
-          body="The product focuses on trusted milestone events rather than continuous monitoring, which keeps the experience premium and easier to govern."
-        />
-      </section>
+function Metric({ label, value, tone = "default" }) {
+  return (
+    <div className="ntg-strip-metric" data-tone={tone}>
+      <div className="ntg-strip-label">{label}</div>
+      <div className="ntg-strip-value">{value}</div>
     </div>
   );
 }

@@ -46,7 +46,7 @@ body {
 }
 
 body::before {
-  content: "";
+  content: none;
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -59,7 +59,7 @@ body::before {
 }
 
 body::after {
-  content: "";
+  content: none;
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -105,10 +105,10 @@ input::placeholder { color: inherit; opacity: 0.48; }
 .ntg-panel {
   background: var(--ntg-panel-bg, var(--ntg-panel));
   border: 1px solid var(--ntg-panel-border, var(--ntg-line));
-  border-radius: var(--ntg-panel-radius, 28px);
-  box-shadow: var(--ntg-panel-shadow, var(--ntg-soft-shadow));
-  backdrop-filter: var(--ntg-glass-filter);
-  -webkit-backdrop-filter: var(--ntg-glass-filter);
+  border-radius: var(--ntg-panel-radius, 8px);
+  box-shadow: var(--ntg-panel-shadow, none);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .ntg-eyebrow {
@@ -121,18 +121,18 @@ input::placeholder { color: inherit; opacity: 0.48; }
 
 .ntg-heading-display {
   margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
-  font-weight: 400;
-  line-height: 0.95;
-  letter-spacing: -0.045em;
+  font-family: "Geist", ui-sans-serif, sans-serif;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0;
 }
 
 .ntg-heading-section {
   margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
-  font-weight: 400;
-  line-height: 0.98;
-  letter-spacing: -0.03em;
+  font-family: "Geist", ui-sans-serif, sans-serif;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: 0;
 }
 
 .ntg-copy {
@@ -163,7 +163,7 @@ input::placeholder { color: inherit; opacity: 0.48; }
 }
 
 .ntg-nav-button:hover {
-  transform: translateX(4px);
+  transform: none;
   background: var(--ntg-surface);
   border-color: var(--ntg-line);
 }
@@ -171,7 +171,7 @@ input::placeholder { color: inherit; opacity: 0.48; }
 .ntg-nav-button.is-active {
   background: var(--ntg-surface-alt);
   border-color: var(--ntg-line-strong);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 28px rgba(4, 10, 18, 0.08);
+  box-shadow: inset 3px 0 0 var(--ntg-info);
 }
 
 .ntg-nav-button.is-active:hover { transform: none; }
@@ -184,9 +184,9 @@ input::placeholder { color: inherit; opacity: 0.48; }
 
 .ntg-interactive-card:hover,
 .ntg-interactive-button:hover {
-  transform: translateY(-2px);
+  transform: none;
   border-color: var(--ntg-line-strong) !important;
-  box-shadow: 0 18px 36px rgba(4, 10, 18, 0.14) !important;
+  box-shadow: none !important;
 }
 
 .ntg-interactive-card.is-soft:hover,
@@ -200,6 +200,7 @@ input::placeholder { color: inherit; opacity: 0.48; }
 }
 
 .ntg-table-row:hover { transform: translateX(4px); }
+.ntg-table-row:hover { transform: none; }
 .ntg-table-row:not(.is-selected):hover { background: var(--ntg-surface); }
 .ntg-table-row.is-selected { box-shadow: inset 4px 0 0 var(--ntg-accent); }
 .ntg-table-row.is-selected:hover { transform: none; }
