@@ -135,7 +135,8 @@ function routeLatLngs(gateIds) {
 function gateTooltip(gate) {
   return `<div class="ntg-tip-card">
     <div class="ntg-tip-title">${gate.name}</div>
-    <div class="ntg-tip-subtitle">Tier ${gate.tier} / ${gate.type}</div>
+    <div class="ntg-tip-subtitle">${gate.gate_owner || `Tier ${gate.tier}`} / ${gate.gate_type || gate.type}</div>
+    ${gate.source_label ? `<div class="ntg-tip-subtitle">${gate.source_label}</div>` : ""}
   </div>`;
 }
 

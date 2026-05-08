@@ -225,6 +225,118 @@ function confidencePercent(event) {
   return `${Math.round(confidence * 100)}%`;
 }
 
+const BUSINESS_LEVELS = ["Low", "Medium", "High"];
+const SENSITIVE_CARGO_TERMS = ["temperature", "temp", "pharma", "healthcare", "automotive", "jit"];
+
+function levelIndex(level) {
+  return BUSINESS_LEVELS.indexOf(level);
+}
+
+function maxLevel(...levels) {
+  return levels.reduce((highest, level) => (
+    levelIndex(level) > levelIndex(highest) ? level : highest
+  ), "Low");
+}
+
+function raiseLevel(level) {
+  const index = Math.max(0, levelIndex(level));
+  return BUSINESS_LEVELS[Math.min(index + 1, BUSINESS_LEVELS.length - 1)];
+}
+
+function normalizeTier(tier) {
+  const value = tier || "Standard";
+  if (["Standard", "Premium", "Critical"].includes(value)) return value;
+  return "Standard";
+}
+
+function inferCargoProfile(shipment) {
+  if (shipment.cargo_profile) return shipment.cargo_profile;
+  const cargo = `${shipment.cargo || ""}`.toLowerCase();
+  if (cargo.includes("pharma")) return "Pharma/healthcare";
+  if (cargo.includes("temp") || cargo.includes("cooled") || cargo.includes("refrigerated")) return "Temperature-controlled";
+  if (cargo.includes("automotive") || cargo.includes("jit")) return "Automotive/JIT";
+  if (cargo.includes("retail") || cargo.includes("fmcg")) return "Retail distribution";
+  if (cargo.includes("high-value")) return "High-value";
+  return "General freight";
+}
+
+function latestReviewEvent(shipment) {
+  const reviewEvents = shipment.reviewEvents || [];
+  return reviewEvents[reviewEvents.length - 1] || null;
+}
+
+function latestEventStatus(shipment) {
+  const reviewEvent = latestReviewEvent(shipment);
+  if (reviewEvent) return confidenceStatus(reviewEvent);
+
+  const events = shipment.events || [];
+  const event = events[events.length - 1];
+  return event ? confidenceStatus(event) : "confirmed";
+}
+
+function hasRouteDeviation(shipment) {
+  const reviewEvent = latestReviewEvent(shipment);
+  const reason = `${reviewEvent?.reason || ""}`.toLowerCase();
+  return reason.includes("route") || reason.includes("planned route") || reason.includes("not expected");
+}
+
+function getEtaImpactMinutes(shipment) {
+  if (shipment.eta_impact_minutes != null) return Math.max(0, Number(shipment.eta_impact_minutes) || 0);
+  if (shipment.id === "SHP-2026-00421") return 45;
+  if (shipment.status === "exception") return 45;
+  if (shipment.status === "at-risk") return 25;
+  return 8;
+}
+
+function getBaseSlaRisk(etaImpactMinutes, eventStatus, shipmentStatus) {
+  if (shipmentStatus === "exception" || eventStatus === "rejected") return "High";
+  if (etaImpactMinutes >= 30 || eventStatus === "needs_review") return "Medium";
+  if (etaImpactMinutes >= 15) return "Medium";
+  return "Low";
+}
+
+function getBusinessImpact(shipment) {
+  const isPulseDemoCase = shipment.id === "SHP-2026-00421";
+  const customerTier = normalizeTier(shipment.customer_tier || shipment.customerTier || (isPulseDemoCase ? "Premium" : undefined));
+  const cargoProfile = inferCargoProfile(shipment);
+  const etaImpactMinutes = getEtaImpactMinutes(shipment);
+  const eventStatus = latestEventStatus(shipment);
+  const routeDeviation = hasRouteDeviation(shipment);
+  const cargoLower = cargoProfile.toLowerCase();
+  const isSensitiveCargo = SENSITIVE_CARGO_TERMS.some((term) => cargoLower.includes(term));
+
+  let slaRisk = getBaseSlaRisk(etaImpactMinutes, eventStatus, shipment.status);
+  if (isSensitiveCargo) slaRisk = raiseLevel(slaRisk);
+
+  let customerImpact = "Low";
+  if (etaImpactMinutes >= 15) customerImpact = "Medium";
+  if (shipment.status === "exception" || eventStatus === "rejected" || routeDeviation) customerImpact = "High";
+  if (customerTier === "Premium" && etaImpactMinutes > 30) customerImpact = "High";
+  if (customerTier === "Critical" && (etaImpactMinutes > 0 || eventStatus !== "confirmed")) customerImpact = "High";
+  if (eventStatus === "needs_review") customerImpact = maxLevel(customerImpact, "Medium");
+  if (slaRisk === "High") customerImpact = maxLevel(customerImpact, "Medium");
+
+  let recommendedAction = "No action required";
+  if (eventStatus === "rejected" || routeDeviation) {
+    recommendedAction = "Operator review";
+  } else if (customerImpact === "High") {
+    recommendedAction = "Notify customer";
+  } else if (customerImpact === "Medium") {
+    recommendedAction = "Monitor next gate";
+  }
+
+  return {
+    customerTier,
+    cargoProfile,
+    etaImpactMinutes,
+    slaRisk,
+    customerImpact,
+    recommendedAction,
+    eventStatus,
+    explanation: "Impact is estimated from customer tier, cargo profile, ETA impact and event status.",
+  };
+}
+
 NTG.domain.shipments.service = {
   cloneBootstrapPayload,
   hydrateBootstrapPayload,
@@ -240,4 +352,5 @@ NTG.domain.shipments.service = {
   confidenceStatus,
   confidenceLabel,
   confidencePercent,
+  getBusinessImpact,
 };

@@ -498,6 +498,44 @@
   line-height: 1.5;
 }
 
+.ntg-business-impact-detail {
+  --ntg-impact-color: var(--ntg-success);
+  --ntg-panel-radius: 8px;
+  --ntg-panel-shadow: none;
+  margin-top: 16px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  gap: 16px;
+  border-color: color-mix(in srgb, var(--ntg-impact-color) 28%, var(--ntg-line));
+}
+
+.ntg-business-impact-detail[data-impact="medium"] {
+  --ntg-impact-color: var(--ntg-warning);
+}
+
+.ntg-business-impact-detail[data-impact="high"] {
+  --ntg-impact-color: var(--ntg-danger);
+}
+
+.ntg-business-impact-title {
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--ntg-impact-color);
+}
+
+.ntg-business-impact-copy {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ntg-ink-muted);
+}
+
+.ntg-business-impact-grid {
+  display: grid;
+  gap: 8px;
+}
+
 .ntg-detail-flag {
   --ntg-panel-bg: color-mix(in srgb, var(--ntg-status-color, var(--ntg-accent)) 8%, transparent);
   --ntg-panel-border: color-mix(in srgb, var(--ntg-status-color, var(--ntg-accent)) 28%, var(--ntg-line));
@@ -1078,6 +1116,7 @@
 
   .ntg-analytics-panel-grid,
   .ntg-detail-panels,
+  .ntg-business-impact-detail,
   .ntg-equipment-detail {
     grid-template-columns: 1fr;
   }

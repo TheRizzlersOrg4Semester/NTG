@@ -88,14 +88,14 @@ const DEMO_STEPS = [
     scenario: "equipment_handover",
   },
   {
-    target: "summary",
-    title: "Business value",
-    body: "Verified milestones improve ETA confidence, reduce manual tracking work and create premium customer visibility.",
-  },
-  {
     target: "privacy",
     title: "Privacy-safe event model",
     body: "NTG receives verified shipment events, not live video, full plate databases or non-matching vehicles.",
+  },
+  {
+    target: "value",
+    title: "Business value",
+    body: "Customer impact helps operators prioritize which delayed or uncertain shipments matter most commercially.",
   },
 ];
 
@@ -123,6 +123,9 @@ function Overview({
   const primaryLastGate = primaryLastEvent ? shipmentData.GATE_BY_ID[eventGateId(primaryLastEvent)] : null;
   const primaryNextGate = primaryShipment ? shipmentData.GATE_BY_ID[nextGateForShipment(primaryShipment)] : null;
   const primaryAssignment = activeAssignmentFor(primaryShipment, now);
+  const primaryImpact = primaryShipment ? shipmentService.getBusinessImpact(primaryShipment) : null;
+  const handoverFrom = primaryShipment?.equipment_assignments?.[0];
+  const handoverTo = primaryShipment?.equipment_assignments?.[1];
   const visibleShipments = useMemo(() => {
     if (!primaryShipment) return shipments;
     return [
@@ -385,6 +388,7 @@ function Overview({
                 <button onClick={() => onSimulate("confirmed")}>Confirm</button>
                 <button onClick={() => onSimulate("low_confidence")}>Needs review</button>
                 <button onClick={() => onSimulate("route_deviation")}>Deviation</button>
+                <button onClick={() => onSimulate("wrong_gate")}>Rejected</button>
                 <button onClick={() => onSimulate("equipment_handover")}>Handover</button>
               </div>
             )}
@@ -438,14 +442,26 @@ function Overview({
               {attentionShipments.slice(0, 5).map((shipment) => {
                 const reviewEvent = shipment.reviewEvents?.[shipment.reviewEvents.length - 1];
                 const gate = reviewEvent ? shipmentData.GATE_BY_ID[eventGateId(reviewEvent)] : null;
+                const impact = shipmentService.getBusinessImpact(shipment);
                 return (
                   <button key={shipment.id} onClick={() => setSelected(shipment)} className="ntg-attention-row">
                     <div>
                       <div className="ntg-active-id">{shipment.id}</div>
                       <div className="ntg-active-sub">{gate?.name || shipment.flags?.[0] || statusLabel(shipment.status)}</div>
                     </div>
+                    {reviewEvent && (
+                      <div className="ntg-attention-meta">
+                        <span>{shipmentService.confidenceLabel(reviewEvent)}</span>
+                        <span>{shipmentService.confidencePercent(reviewEvent)}</span>
+                        <span>{fmtTime(reviewEvent.timestamp)}</span>
+                      </div>
+                    )}
                     <div className="ntg-attention-reason">
                       {reviewEvent?.reason || shipment.flags?.[0] || "Operational status requires review"}
+                    </div>
+                    <div className="ntg-attention-impact" data-impact={impact.customerImpact.toLowerCase()}>
+                      <span>Impact {impact.customerImpact}</span>
+                      <span>{impact.recommendedAction}</span>
                     </div>
                   </button>
                 );
@@ -461,7 +477,8 @@ function Overview({
                 <Metric label="Current tractor hash" value={primaryAssignment?.tractor_plate_hash || primaryShipment.tractor_plate_hash || "-"} />
               </div>
               <div className="ntg-equipment-copy">
-                Carrier handover can change the tractor while trailer {primaryShipment.trailer_id || primaryShipment.equipment_id} remains linked to the shipment.
+                Carrier handover at Coquelles: tractor changed from {handoverFrom?.tractor_plate_hash || "UK tractor"} to {handoverTo?.tractor_plate_hash || "EU tractor"}.
+                Trailer remains {primaryShipment.trailer_id || primaryShipment.equipment_id}; shipment tracking continues.
               </div>
             </div>
           )}
@@ -498,6 +515,37 @@ function Overview({
               <Metric label="Delivered" value={stats.delivered} tone="success" />
             </div>
           </div>
+
+          <div className="ntg-section-block ntg-business-value" data-demo-active={activeDemoTarget === "value" ? "true" : "false"}>
+            <div className="ntg-eyebrow">Business impact</div>
+            {primaryImpact && (
+              <>
+                <div className="ntg-impact-grid" data-impact={primaryImpact.customerImpact.toLowerCase()}>
+                  <ImpactLine label="Customer tier" value={primaryImpact.customerTier} />
+                  <ImpactLine label="Cargo profile" value={primaryImpact.cargoProfile} />
+                  <ImpactLine label="ETA impact" value={`+${primaryImpact.etaImpactMinutes} min`} />
+                  <ImpactLine label="SLA risk" value={primaryImpact.slaRisk} />
+                  <ImpactLine label="Customer impact" value={primaryImpact.customerImpact} emphasized />
+                  <ImpactLine label="Recommended action" value={primaryImpact.recommendedAction} emphasized />
+                </div>
+                <div className="ntg-impact-explanation">{primaryImpact.explanation}</div>
+              </>
+            )}
+            <div className="ntg-value-list">
+              <div>
+                <strong>Operational saving</strong>
+                <span>Fewer manual tracking inquiries</span>
+              </div>
+              <div>
+                <strong>Premium visibility</strong>
+                <span>Paid service for high-value, temperature-sensitive or JIT shipments</span>
+              </div>
+              <div>
+                <strong>Tender differentiation</strong>
+                <span>Better digital maturity and SLA documentation</span>
+              </div>
+            </div>
+          </div>
         </aside>
       </section>
 
@@ -524,6 +572,15 @@ function Metric({ label, value, tone = "default" }) {
     <div className="ntg-strip-metric" data-tone={tone}>
       <div className="ntg-strip-label">{label}</div>
       <div className="ntg-strip-value">{value}</div>
+    </div>
+  );
+}
+
+function ImpactLine({ label, value, emphasized = false }) {
+  return (
+    <div className="ntg-impact-line" data-emphasized={emphasized ? "true" : "false"}>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

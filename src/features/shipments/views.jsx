@@ -59,6 +59,12 @@ function activeAssignmentFor(shipment, now) {
   }) || assignments[assignments.length - 1];
 }
 
+function impactTone(level) {
+  if (level === "High") return "danger";
+  if (level === "Medium") return "warning";
+  return "success";
+}
+
 function ShipmentList({ shipments, onSelect, selectedId, density, now }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
@@ -246,6 +252,9 @@ function ShipmentDetail({
   const nextGate = shipment.route[shipment.events.length] ? shipmentData.GATE_BY_ID[shipment.route[shipment.events.length]] : null;
   const shipmentTone = statusTone(shipment.status);
   const activeAssignment = activeAssignmentFor(shipment, now);
+  const businessImpact = shipmentService.getBusinessImpact(shipment);
+  const handoverFrom = shipment.equipment_assignments?.[0];
+  const handoverTo = shipment.equipment_assignments?.[1];
 
   const segments = [];
   for (let index = 0; index < shipment.events.length - 1; index += 1) {
@@ -289,6 +298,25 @@ function ShipmentDetail({
             <Stat label="Weight" value={`${(shipment.weightKg / 1000).toFixed(1)} t`} sub={`${shipment.events.length} of ${shipment.route.length} milestones confirmed`} mono />
           </div>
 
+          <div className="ntg-panel ntg-business-impact-detail" data-impact={businessImpact.customerImpact.toLowerCase()}>
+            <div>
+              <SectionLabel>Business impact</SectionLabel>
+              <div className="ntg-business-impact-title">
+                Customer impact: {businessImpact.customerImpact}
+              </div>
+              <div className="ntg-business-impact-copy">
+                {businessImpact.explanation}
+              </div>
+            </div>
+            <div className="ntg-business-impact-grid">
+              <DetailLine label="Customer tier" value={businessImpact.customerTier} />
+              <DetailLine label="Cargo profile" value={businessImpact.cargoProfile} />
+              <DetailLine label="ETA impact" value={`+${businessImpact.etaImpactMinutes} min`} />
+              <DetailLine label="SLA risk" value={businessImpact.slaRisk} tone={impactTone(businessImpact.slaRisk)} />
+              <DetailLine label="Recommended action" value={businessImpact.recommendedAction} tone={impactTone(businessImpact.customerImpact)} />
+            </div>
+          </div>
+
           {(shipment.trailer_id || shipment.equipment_id || shipment.equipment_assignments) && (
             <div className="ntg-panel ntg-equipment-detail">
               <div>
@@ -297,13 +325,20 @@ function ShipmentDetail({
                   Trailer / load unit {shipment.trailer_id || shipment.equipment_id}
                 </div>
                 <div className="ntg-equipment-detail-copy">
-                  Tracking remains tied to the trailer/load unit, even when tractor assignments change during a handover.
+                  Carrier handover at Coquelles can change tractor while the trailer/load unit stays attached to the shipment.
                 </div>
               </div>
               <div className="ntg-equipment-detail-grid">
                 <DetailLine label="Current tractor hash" value={activeAssignment?.tractor_plate_hash || shipment.tractor_plate_hash || "Not available"} />
                 <DetailLine label="Carrier" value={activeAssignment?.carrier_id || shipment.carrier || "Not available"} />
                 <DetailLine label="Handover status" value={(shipment.equipment_assignments || []).length > 1 ? "Carrier handover supported" : "Single assignment"} tone="info" />
+                {handoverFrom && handoverTo && (
+                  <DetailLine
+                    label="Demo handover"
+                    value={`Tractor changed: ${handoverFrom.tractor_plate_hash} -> ${handoverTo.tractor_plate_hash}. Trailer remains ${shipment.trailer_id || shipment.equipment_id}.`}
+                    tone="success"
+                  />
+                )}
               </div>
             </div>
           )}
